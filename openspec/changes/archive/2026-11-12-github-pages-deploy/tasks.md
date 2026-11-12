@@ -6,7 +6,7 @@ KI hakt sie erst ab, wenn der Nutzer sie bestätigt.
 ## 1. Build-Pfad
 
 - [x] 1.1 `vite.config.ts` auf die Funktionsform von `defineConfig` umstellen und `base` auf `"/raum-planer/"` nur für `command === "build"` setzen (sonst `"/"`), Test-Konfiguration unverändert lassen; prüfen: `npm run build`, dann verweisen in `dist/index.html` Skript, CSS und Favicon auf `/raum-planer/…`
-- [ ] 1.2 Lokal mit `npm run preview` prüfen, dass die App unter `/raum-planer/` ohne 404 im Netzwerk-Tab lädt, und mit `npm run dev`, dass sie weiterhin unter `/` lädt (Sichtprüfung durch den Nutzer im Browser)
+- [x] 1.2 Lokal mit `npm run preview` prüfen, dass die App unter `/raum-planer/` ohne 404 im Netzwerk-Tab lädt, und mit `npm run dev`, dass sie weiterhin unter `/` lädt (Sichtprüfung durch den Nutzer im Browser)
 
 ## 2. Deploy-Workflow
 
@@ -23,11 +23,11 @@ KI hakt sie erst ab, wenn der Nutzer sie bestätigt.
 - [x] 4.2 **[Nutzer]** Neues **öffentliches** Repo `lumiliaro/raum-planer` angelegt; geprüft: öffentlich und leer
 - [x] 4.3 **[Nutzer]** Lokal `origin` auf das neue Repo setzen (bzw. altes als `old-private` behalten) und `git push -u origin public-main:main` ausführen; prüfen: `main` auf GitHub zeigt genau einen Commit, Autor mit noreply-Adresse, keine Dateien unter `public/plans/`
 - [x] 4.4 **[Nutzer]** Repo → Settings → Pages → Source „GitHub Actions“ wählen; prüfen: Einstellung gespeichert
-- [ ] 4.5 Branch `github-pages` pushen, PR nach `main` öffnen; nach dem Merge durch den Nutzer prüfen: Workflow „Deploy“ läuft grün durch
+- [x] 4.5 Branch `github-pages` pushen, PR nach `main` öffnen; nach dem Merge durch den Nutzer prüfen: Workflow „Deploy“ läuft grün durch
 
 ## 5. Integration
 
-- [ ] 5.1 Live-Prüfung durch den Nutzer: `https://lumiliaro.github.io/raum-planer/` und die Adresse ohne abschließenden `/` laden die App, ein angelegter Raum bleibt nach Neuladen erhalten, Export und Import funktionieren
+- [x] 5.1 Live-Prüfung durch den Nutzer: `https://lumiliaro.github.io/raum-planer/` und die Adresse ohne abschließenden `/` laden die App, ein angelegter Raum bleibt nach Neuladen erhalten, Export und Import funktionieren
 - [x] 5.2 Letzte Aufgabe: `npm run build` und `npm test` laufen fehlerfrei
 
 ## Workflow follow-up
