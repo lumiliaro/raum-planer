@@ -40,6 +40,7 @@ import {
 
 const PANEL_KEY = "raumplaner.ui.propertiesPanelOpen";
 const DIMENSIONS_KEY = "raumplaner.ui.showDimensions";
+const SNAPPING_KEY = "raumplaner.ui.shapeSnapping";
 const CREATED = new Date("2026-11-01T10:00:00.000Z");
 const NOW = new Date("2026-11-11T18:30:00.000Z");
 const now = () => NOW;
@@ -158,6 +159,48 @@ describe("app store", () => {
             store.getState().undo();
             expect(store.getState().plan.shapesByFloor.eg[0].x).toBe(100);
             expect(store.getState().showDimensions).toBe(true);
+        });
+    });
+
+    describe("shape snapping", () => {
+        it("is on without a stored value, off with „false“, on with an invalid value or a throwing storage", () => {
+            expect(createAppStore(storedPlan()).getState().shapeSnapping).toBe(true);
+            expect(createAppStore(memoryStorage({ [SNAPPING_KEY]: "false" })).getState().shapeSnapping).toBe(false);
+            expect(createAppStore(memoryStorage({ [SNAPPING_KEY]: "nein" })).getState().shapeSnapping).toBe(true);
+            expect(createAppStore(throwingStorage()).getState().shapeSnapping).toBe(true);
+        });
+
+        it("toggling changes the state and writes the preference", () => {
+            const storage = storedPlan();
+            const store = createAppStore(storage);
+            store.getState().toggleShapeSnapping();
+            expect(store.getState().shapeSnapping).toBe(false);
+            expect(storage.getItem(SNAPPING_KEY)).toBe("false");
+            store.getState().toggleShapeSnapping();
+            expect(store.getState().shapeSnapping).toBe(true);
+            expect(storage.getItem(SNAPPING_KEY)).toBe("true");
+        });
+
+        it("toggling still works when the storage throws", () => {
+            const store = createAppStore(throwingStorage());
+            expect(() => store.getState().toggleShapeSnapping()).not.toThrow();
+            expect(store.getState().shapeSnapping).toBe(false);
+        });
+
+        it("toggling changes neither the plan nor updatedAt and adds no undo step", () => {
+            const clock = { now: new Date("2026-11-11T09:00:00.000Z") };
+            const store = createAppStore(storedPlan((p) => addShape(p, "eg", rect(1), CREATED)), { now: () => clock.now });
+            store.getState().updateShape("eg", uuid(1), { x: 250 });
+            const plan = store.getState().plan;
+            const steps = store.temporal.getState().pastStates.length;
+            clock.now = new Date("2026-11-11T10:00:00.000Z");
+            store.getState().toggleShapeSnapping();
+            expect(store.getState().plan).toBe(plan);
+            expect(store.temporal.getState().pastStates.length).toBe(steps);
+            // Undo takes back the move of the shape, snapping stays off.
+            store.getState().undo();
+            expect(store.getState().plan.shapesByFloor.eg[0].x).toBe(100);
+            expect(store.getState().shapeSnapping).toBe(false);
         });
     });
 

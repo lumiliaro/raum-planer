@@ -37,6 +37,9 @@
 - [x] 2.2 Hilfslinien: `ShapeNode` meldet die getroffenen Linien samt `boundsCm` des Raums über `onSnapGuides` nur bei Änderung, `onDragEnd` meldet `null`; `ShapesLayer` hält sie in `useState` und zeichnet je Linie eine gestrichelte `Line` in `SELECTION_COLOR` über die Breite bzw. Höhe des Raumrechtecks, Strichbreite und Muster in Bildschirmpixeln, `listening={false}` (design.md Entscheidung 6). Prüfen im Browser: Szenarien „Hilfslinie der Raummitte“ und „Hilfslinie endet mit dem Loslassen“; mit Strg keine Linie; Zoom 50 % und 200 % – Linienstärke bleibt gleich.
 - [x] 2.3 Doku-Kommentare von `ShapeNode` und `ShapesLayer` um Einrasten und Hilfslinien ergänzen; im Browser gegenprüfen, dass Größe ändern, Drehen und Verschieben eines Raums samt Möbeln unverändert funktionieren und ein Rückgängig-Schritt pro Verschieben entsteht. Prüfen mit `npx tsc -b`.
 
+- [x] 2.4 Browser-Einstellung: `SHAPE_SNAPPING_KEY = "raumplaner.ui.shapeSnapping"` in `src/lib/ui-prefs.ts`; im Store `shapeSnapping` (ohne gemerkten Wert `true`) und `toggleShapeSnapping` wie `showDimensions`/`toggleDimensions` (design.md Entscheidung 7). Tests in `src/store/app-store.test.ts`: Startwert ohne/mit gemerktem Wert und bei werfendem Storage; Umschalten schreibt den Wert; Umschalten ändert weder Plan noch `updatedAt` und erzeugt keinen Rückgängig-Schritt. Prüfen mit `npm test`.
+- [x] 2.5 Schalter: Toggle-Button „Einrasten“ mit Magnet-Symbol neben „Maße“ in `ZoomControls` (`aria-pressed` = an), verdrahtet in `FloorCanvas`; `ShapesLayer` reicht `shapeSnapping` als `snapping` an `ShapeNode`, ausgeschaltet nur Raster und keine Hilfslinie. Prüfen mit `npx tsc -b` und im Browser: Szenarien „Einrasten ausgeschaltet“, „Einstellung bleibt erhalten“, „Kein Rückgängig-Schritt“; Türen und Räume rasten bei ausgeschaltetem Schalter weiter ein.
+
 ## 3. Abschluss
 
 - [x] 3.1 Letzte Aufgabe: `npm run build` und `npm test` laufen fehlerfrei.

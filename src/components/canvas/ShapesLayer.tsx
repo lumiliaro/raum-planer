@@ -31,6 +31,7 @@ interface ShapesLayerProps {
  * release) are drawn moved by the room's snapped offset, so they follow the
  * room before the plan changes.
  *
+ * With the „Einrasten“ switch off (`shapeSnapping`), shapes only move on the grid.
  * While a shape is dragged and snapped to a snap line, the line is drawn
  * dashed in the selection color across the bounding box of its room (at most
  * one per axis, above the shapes, below the transformer); it disappears when
@@ -46,6 +47,7 @@ export function ShapesLayer({ floorId, scale }: ShapesLayerProps) {
     const ctrlRef = useCtrlKeyRef();
     const [guides, setGuides] = useState<SnapGuides | null>(null);
     const showDimensions = useAppStore((s) => s.showDimensions);
+    const snapping = useAppStore((s) => s.shapeSnapping);
     const roomDrag = useAppStore((s) => (s.roomDrag?.floorId === floorId ? s.roomDrag : null));
     // The dragged room's corners before the move: they only change on release.
     const draggedRoomPoints = useAppStore((s) =>
@@ -81,6 +83,7 @@ export function ShapesLayer({ floorId, scale }: ShapesLayerProps) {
                     draggable={selecting && !shape.locked}
                     showDimensions={showDimensions}
                     altRef={altRef}
+                    snapping={snapping}
                     ctrlRef={ctrlRef}
                     rooms={rooms}
                     shapes={shapes}

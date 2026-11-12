@@ -145,7 +145,7 @@ Ist „Auswählen“ aktiv, SHALL das Ziehen einer Form diese Form verschieben u
 - **AND** die Ansicht hat sich nicht verschoben
 
 ### Requirement: Raster beim Verschieben
-Beim Ziehen SHALL sich eine Form relativ zu ihrer Startlage in Schritten von 5 cm je Achse bewegen. Bei gedrückter Alt-Taste MUST die Schrittweite 1 cm betragen. Die Startlage MUST NOT vorher auf das Raster gezogen werden.
+Beim Ziehen SHALL sich eine Form relativ zu ihrer Startlage in Schritten von 5 cm je Achse bewegen, außer sie rastet auf dieser Achse an einer Rastlinie ein (siehe „Einrasten je Achse mit Vorrang vor dem Raster“ in shape-snapping). Bei gedrückter Alt-Taste MUST die Schrittweite 1 cm betragen. Die Startlage MUST NOT vorher auf das Raster gezogen werden.
 
 #### Scenario: 5-cm-Schritte
 - **GIVEN** ein Schrank hat den Mittelpunkt x = 37 cm, y = 120 cm

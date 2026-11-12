@@ -14,6 +14,7 @@ Möbel lassen sich beim Ziehen bisher nur im 5-cm-/1-cm-Raster relativ zur Start
 - Ein Rastziel hat Vorrang vor dem Raster; auf einer Achse ohne Rastziel gilt weiter das Raster.
 - Solange eine Achse eingerastet ist, zeigt eine gestrichelte Hilfslinie in der Auswahlfarbe die Rastlinie; nach dem Loslassen verschwindet sie.
 - Mit gedrückter Strg-Taste rastet die Form nirgends ein (wie beim Ziehen eines Raums); es gilt nur das Raster.
+- Ein Schalter „Einrasten“ unten rechts neben „Maße“ schaltet das Einrasten von Möbeln dauerhaft aus und wieder ein – auch ohne Tastatur, z. B. am Tablet. Er wird wie „Maße“ im Browser gemerkt, nicht im Plan; Werkseinstellung: an.
 - Das Datenmodell ändert sich nicht.
 
 **Nicht im Umfang:**
@@ -23,12 +24,13 @@ Möbel lassen sich beim Ziehen bisher nur im 5-cm-/1-cm-Raster relativ zur Start
 - Schräge Raumkanten (nicht waagerecht/senkrecht) und Öffnungen auf schrägen Kanten als Rastziel.
 - Formen außerhalb jedes Raums rasten nicht ein (nur Raster); Formen anderer Räume sind keine Rastziele.
 - Freie Formen (polygon) ohne Umriss rasten nicht ein und sind keine Rastziele.
-- Abstands-Rastpunkte (z. B. „gleicher Abstand zu zwei Wänden“ oder fester Wandabstand) und eine Einstellung zum dauerhaften Abschalten.
+- Abstands-Rastpunkte (z. B. „gleicher Abstand zu zwei Wänden“ oder fester Wandabstand).
+- Der Schalter „Einrasten“ wirkt nicht auf Rastpunkte von Türen und Fenstern und nicht auf das Haften von Räumen an Wänden.
 
 ## Capabilities
 
 ### New Capabilities
-- `shape-snapping`: Rastlinien für Formen beim Ziehen innerhalb eines Raums (Raummitte, Öffnungsmitte, Wand, andere Formen), deren Vorrang vor dem Raster, die Hilfslinie und das Abschalten mit Strg.
+- `shape-snapping`: Rastlinien für Formen beim Ziehen innerhalb eines Raums (Raummitte, Öffnungsmitte, Wand, andere Formen), deren Vorrang vor dem Raster, die Hilfslinie, das Abschalten mit Strg und der Schalter „Einrasten“.
 
 ### Modified Capabilities
 - `shape-editing`: „Raster beim Verschieben“ gilt nur noch, solange die Form auf der jeweiligen Achse nicht an einer Rastlinie einrastet.
@@ -38,4 +40,5 @@ Möbel lassen sich beim Ziehen bisher nur im 5-cm-/1-cm-Raster relativ zur Start
 - Neue reine Logik in `src/lib/shape-snap.ts` (Rastlinien eines Raums, Umrissgrenzen einer Form, Einrasten je Achse) mit Vitest-Tests.
 - `src/components/canvas/ShapeNode.tsx`: `dragBoundFunc` nutzt die Rastlogik; Strg-Taste über `useCtrlKeyRef`.
 - `src/components/canvas/ShapesLayer.tsx`: zeichnet die Hilfslinien während des Ziehens.
+- `src/lib/ui-prefs.ts`, `src/store/app-store.ts`, `src/components/canvas/ZoomControls.tsx`, `FloorCanvas.tsx`: Browser-Einstellung `shapeSnapping` mit Schalter neben „Maße“.
 - Keine neuen Abhängigkeiten, keine Änderung an `plan-schema.ts`, `schemaVersion` bleibt.

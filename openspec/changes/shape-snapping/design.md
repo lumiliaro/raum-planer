@@ -56,8 +56,13 @@ Neue reine Funktion `shapeBoundsCm(shape)` liefert die AABB des gedrehten Umriss
 
 *Alternative:* Zustand im Store wie `roomDrag`. Verworfen: Nur der `ShapesLayer` braucht ihn, und der Store-Verlauf (zundo) soll davon nichts sehen.
 
+### 7. Schalter „Einrasten“ als Browser-Einstellung
+Ohne Tastatur (Tablet) lässt sich Strg nicht halten, daher ein dauerhafter Schalter. Er liegt als Toggle-Button mit Magnet-Symbol neben „Maße“ in `ZoomControls` und wird genau wie `showDimensions` behandelt: Store-Feld `shapeSnapping` (Start aus `readBoolean(storage, SHAPE_SNAPPING_KEY, true)`), Aktion `toggleShapeSnapping` schreibt per `writeBoolean`; außerhalb von `plan`, also weder gespeichert im Plan noch exportiert noch im zundo-Verlauf. `ShapesLayer` liest das Feld und reicht es als Prop `snapping` an `ShapeNode`; dort gilt `!snapping || ctrlRef.current` → nur Raster. Nur Möbel: Öffnungen (Umschalt) und Räume (Strg) bleiben unverändert.
+
+*Alternative:* Teil der `PlanSettings` im Einstellungen-Dialog. Verworfen: verlangt neue `schemaVersion` samt Migration, und es ist eine Bedienvorliebe des Geräts, keine Eigenschaft des Plans.
+
 ### Datenmodell und schemaVersion
-Keine Änderung am Datenmodell: Rastlinien sind reine Ansichtslogik, nichts wird gespeichert oder exportiert. `schemaVersion` bleibt unverändert; Import/Export und Migration sind nicht betroffen.
+Keine Änderung am Datenmodell: Rastlinien sind reine Ansichtslogik, nichts wird gespeichert oder exportiert; der Schalter „Einrasten“ liegt nur im localStorage (`raumplaner.ui.shapeSnapping`). `schemaVersion` bleibt unverändert; Import/Export und Migration sind nicht betroffen.
 
 ## Risks / Trade-offs
 

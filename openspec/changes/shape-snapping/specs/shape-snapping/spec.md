@@ -113,6 +113,29 @@ Bei gedrückter Strg-Taste MUST eine gezogene Form an keiner Rastlinie einrasten
 - **THEN** liegt sein Mittelpunkt bei x = 245 cm
 - **AND** während des Ziehens war keine Hilfslinie zu sehen
 
+### Requirement: Schalter „Einrasten“
+Unten rechts neben dem Schalter „Maße“ SHALL ein Schalter „Einrasten“ das Einrasten von Formen an Rastlinien ein- und ausschalten. Ist er aus, MUST eine gezogene Form wie mit gedrückter Strg-Taste an keiner Rastlinie einrasten und es erscheint keine Hilfslinie; das Raster gilt weiter. Der Schalter MUST NOT auf Türen, Fenster, Durchgänge oder Räume wirken.
+
+#### Scenario: Einrasten ausgeschaltet
+- **GIVEN** der Raum „Wohnen“ mit den Ecken (0 cm, 0 cm), (500 cm, 0 cm), (500 cm, 400 cm), (0 cm, 400 cm), der Zoom steht auf 100 % und ein Tisch 160 cm × 90 cm hat den Mittelpunkt x = 120 cm, y = 300 cm
+- **AND** der Schalter „Einrasten“ ist aus
+- **WHEN** der Nutzer ihn ohne Taste um 127 cm nach rechts zieht und loslässt
+- **THEN** liegt sein Mittelpunkt bei x = 245 cm
+- **AND** während des Ziehens war keine Hilfslinie zu sehen
+
+### Requirement: Schalter „Einrasten“ wird im Browser gemerkt
+Die Stellung des Schalters „Einrasten“ SHALL im Browser gemerkt werden und beim nächsten Start gelten; ohne gemerkten Wert ist er an. Sie MUST NOT Teil des Plans, des Exports oder des Rückgängig-Verlaufs sein.
+
+#### Scenario: Einstellung bleibt erhalten
+- **GIVEN** der Nutzer hat den Schalter „Einrasten“ ausgeschaltet
+- **WHEN** er die Seite neu lädt
+- **THEN** ist der Schalter weiterhin aus
+
+#### Scenario: Kein Rückgängig-Schritt
+- **GIVEN** der Nutzer hat einen Schrank verschoben
+- **WHEN** er den Schalter „Einrasten“ umschaltet und dann „Rückgängig“ wählt
+- **THEN** wird das Verschieben des Schranks zurückgenommen und der Schalter bleibt, wie er ist
+
 ### Requirement: Hilfslinie beim Einrasten
 Solange eine gezogene Form auf einer Achse eingerastet ist, SHALL ihre Rastlinie als gestrichelte Linie in der Auswahlfarbe über die ganze Breite bzw. Höhe des umschließenden Rechtecks des Raums zu sehen sein, höchstens eine je Achse. Rastet die Achse aus oder lässt der Nutzer los, MUST die Hilfslinie verschwinden.
 
