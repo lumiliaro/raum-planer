@@ -22,6 +22,8 @@ Netzwerkaufrufe zur Laufzeit.
 - Pläne aus der lokalen Entwicklung (`localhost`) erscheinen dort nicht von
   selbst: lokal exportieren und online importieren.
 - Der Browser kann seinen Speicher leeren. Ein Export dient als Sicherung.
+- Beim ersten Start erscheint ein kurzes Tutorial durch die Grundfunktionen.
+  Unter „Einstellungen → Tutorial neu starten“ lässt es sich erneut starten.
 - Jeder Push auf `main` wird über GitHub Actions geprüft (Lint, Tests,
   Build) und anschließend automatisch veröffentlicht
   (`.github/workflows/deploy.yml`).

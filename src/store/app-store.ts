@@ -6,6 +6,7 @@ import { edgeFrame } from "@/lib/opening-geometry";
 import { createOpening, nearestRoomEdge, newOpeningSnap } from "@/lib/opening-placement";
 import * as planOps from "@/lib/plan";
 import { sameContent } from "@/lib/plan-diff";
+import { TUTORIAL_STEPS } from "@/components/tutorial/tutorial-steps";
 import { canAppendPoint, canClose, pointAtDistance, roundPointCm, type Direction } from "@/lib/room-drawing";
 import type { PlanSettings, SettingsPatch } from "@/lib/plan-settings";
 import {
@@ -32,6 +33,8 @@ import {
     readBoolean,
     SHAPE_SNAPPING_KEY,
     SHOW_DIMENSIONS_KEY,
+    shouldAutoStartTutorial,
+    TUTORIAL_SEEN_KEY,
     writeBoolean,
 } from "@/lib/ui-prefs";
 import { underlayWithImage, type ImageAvailability, type UnderlayImage } from "@/lib/underlay";
@@ -146,6 +149,11 @@ export interface AppState {
     shapeSnapping: boolean;
     /** Session-only, not part of the history: the open tab of „Hilfe“, `null` = dialog closed. */
     helpTab: HelpTab | null;
+    /**
+     * Session-only, not part of the history: index into `TUTORIAL_STEPS`, `null` = tutorial off.
+     * Starts at 0 on a first visit (`shouldAutoStartTutorial`).
+     */
+    tutorialStep: number | null;
     /** `null` = calibration mode off. */
     calibrationDraft: CalibrationDraft | null;
     /** Session-only, starts as "select". */
@@ -179,6 +187,14 @@ export interface AppState {
     /** Opens „Hilfe“ on the given tab, or switches to it while open. */
     openHelp: (tab: HelpTab) => void;
     closeHelp: () => void;
+    /** Starts the tutorial at step 1, also when it was finished or skipped before. */
+    startTutorial: () => void;
+    /** No effect on the last step or while the tutorial is off. */
+    nextTutorialStep: () => void;
+    /** No effect on the first step or while the tutorial is off. */
+    prevTutorialStep: () => void;
+    /** Ends the tutorial (skip, done, Esc) and remembers in the browser that it was seen. */
+    endTutorial: () => void;
 
     /**
      * Shape actions return `false` and leave `plan` unchanged when the change is
@@ -424,6 +440,9 @@ export function createAppStore(
                     showDimensions: readBoolean(storage, SHOW_DIMENSIONS_KEY, false),
                     shapeSnapping: readBoolean(storage, SHAPE_SNAPPING_KEY, true),
                     helpTab: null,
+                    tutorialStep: shouldAutoStartTutorial(outcome, readBoolean(storage, TUTORIAL_SEEN_KEY, false))
+                        ? 0
+                        : null,
                     calibrationDraft: null,
                     activeTool: "select",
                     selectedShapeId: null,
@@ -461,6 +480,19 @@ export function createAppStore(
                     },
                     openHelp: (tab) => set({ helpTab: tab }),
                     closeHelp: () => set({ helpTab: null }),
+                    startTutorial: () => set({ tutorialStep: 0 }),
+                    nextTutorialStep: () => {
+                        const step = get().tutorialStep;
+                        if (step !== null && step < TUTORIAL_STEPS.length - 1) set({ tutorialStep: step + 1 });
+                    },
+                    prevTutorialStep: () => {
+                        const step = get().tutorialStep;
+                        if (step !== null && step > 0) set({ tutorialStep: step - 1 });
+                    },
+                    endTutorial: () => {
+                        writeBoolean(storage, TUTORIAL_SEEN_KEY, true);
+                        set({ tutorialStep: null });
+                    },
 
                     addShape: (floorId, shape) => applyPlan((p) => planOps.addShape(p, floorId, shape, now())),
                     // The lock is enforced here, for every way of editing; the plan operations stay lock-agnostic.

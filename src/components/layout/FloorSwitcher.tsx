@@ -13,7 +13,7 @@ export function FloorSwitcher() {
     const [dialogOpen, setDialogOpen] = useState(false);
 
     return (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div data-tutorial="floors" className="flex min-w-0 items-center gap-1.5">
             <nav aria-label="Etage" className="min-w-0">
                 <div className="inline-flex max-w-full gap-0.5 rounded-[7px] bg-muted p-[3px]">
                     {floors.map((floor) => {

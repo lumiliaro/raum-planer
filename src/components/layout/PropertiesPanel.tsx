@@ -12,7 +12,7 @@ export function PropertiesPanel() {
     const selectedOpening = useAppStore(useShallow(selectSelectedOpening));
 
     return (
-        <aside aria-label="Eigenschaften" className="flex w-[300px] shrink-0 flex-col border-l bg-background">
+        <aside aria-label="Eigenschaften" data-tutorial="properties" className="flex w-[300px] shrink-0 flex-col border-l bg-background">
             <div className="flex h-10 items-center border-b px-4">
                 <h2 className="text-sm font-semibold">Eigenschaften</h2>
             </div>

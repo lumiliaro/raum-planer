@@ -1,9 +1,17 @@
 import { Ruler } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { TOOLS, toolTooltip } from "@/components/layout/tools";
+import { TOOLS, toolTooltip, type ToolEntry } from "@/components/layout/tools";
+import type { TutorialTarget } from "@/components/tutorial/tutorial-steps";
 import { cn } from "@/lib/utils";
 import { canCalibrate, isToolEnabled, useAppStore } from "@/store/app-store";
+
+/** Tools the tutorial points at; kept here so the registry `TOOLS` stays unchanged. */
+const TUTORIAL_TARGETS: Partial<Record<ToolEntry["id"], TutorialTarget>> = {
+    room: "tool-room",
+    "door-opening": "tool-door",
+    rect: "tool-rect",
+};
 
 /** Vertical tool bar left of the canvas: tools at the top, calibration at the bottom. */
 export function ToolBar() {
@@ -30,6 +38,7 @@ export function ToolBar() {
                             label={tool.name}
                             title={toolTooltip(tool, { hasRoom })}
                             shortcut={tool.key}
+                            tutorialTarget={TUTORIAL_TARGETS[tool.id]}
                             pressed={!calibrating && activeTool === tool.id}
                             disabled={!enabledFlags[i]}
                             onClick={() => setActiveTool(tool.id)}
@@ -42,6 +51,7 @@ export function ToolBar() {
             <div className="mt-auto">
                 <ToolButton
                     label="Vorlage kalibrieren"
+                    tutorialTarget="calibrate"
                     title={calibratable ? undefined : "Vorlage kalibrieren – zuerst ein Bild hochladen"}
                     pressed={calibrating}
                     disabled={!calibratable}
@@ -59,6 +69,8 @@ interface ToolButtonProps {
     /** Tooltip; defaults to `label`. */
     title?: string;
     shortcut?: string;
+    /** Marks the button as a target of the tutorial. */
+    tutorialTarget?: TutorialTarget;
     pressed: boolean;
     /**
      * Locked: `aria-disabled`, half opacity, clicks do nothing. Deliberately no
@@ -69,7 +81,16 @@ interface ToolButtonProps {
     children: ReactNode;
 }
 
-function ToolButton({ label, title, shortcut, pressed, disabled = false, onClick, children }: ToolButtonProps) {
+function ToolButton({
+    label,
+    title,
+    shortcut,
+    tutorialTarget,
+    pressed,
+    disabled = false,
+    onClick,
+    children,
+}: ToolButtonProps) {
     return (
         <button
             type="button"
@@ -77,6 +98,7 @@ function ToolButton({ label, title, shortcut, pressed, disabled = false, onClick
             aria-pressed={pressed}
             aria-disabled={disabled || undefined}
             aria-keyshortcuts={shortcut}
+            data-tutorial={tutorialTarget}
             title={title ?? label}
             onClick={disabled ? undefined : onClick}
             className={cn(

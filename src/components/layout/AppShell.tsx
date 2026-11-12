@@ -8,6 +8,7 @@ import { PlanRecoveryBanner } from "@/components/layout/PlanRecoveryBanner";
 import { PropertiesPanel } from "@/components/layout/PropertiesPanel";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { ToolBar } from "@/components/layout/ToolBar";
+import { TutorialCoach } from "@/components/tutorial/TutorialCoach";
 import { useShapeShortcuts } from "@/hooks/useShapeShortcuts";
 import { useAppStore } from "@/store/app-store";
 
@@ -30,6 +31,8 @@ export function AppShell() {
                 {calibrating ? <CalibrationPanel /> : panelOpen && <PropertiesPanel />}
             </div>
             <StatusBar />
+            {/* Before the dialogs and with a lower z-index, so open dialogs cover it. */}
+            <TutorialCoach />
             <HelpDialog />
         </div>
     );

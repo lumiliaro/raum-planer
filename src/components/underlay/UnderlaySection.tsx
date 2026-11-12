@@ -43,7 +43,7 @@ export function UnderlaySection() {
 
     if (!underlay) {
         return (
-            <PropertySection title="Vorlage">
+            <PropertySection title="Vorlage" tutorialTarget="underlay">
                 <Button variant="outline" size="sm" className="self-start text-[13px]" onClick={pick}>
                     <ImageUp aria-hidden="true" />
                     Bild hochladen
@@ -57,7 +57,7 @@ export function UnderlaySection() {
     const { calibration } = underlay;
 
     return (
-        <PropertySection title="Vorlage">
+        <PropertySection title="Vorlage" tutorialTarget="underlay">
             <InfoRow label="Bild" warn={status === "missing"}>
                 {status === "missing"
                     ? "Bild fehlt"
