@@ -127,6 +127,9 @@ export interface RoomDrag {
     stuckEdges: StuckEdge[];
 }
 
+/** Tabs of the dialog „Hilfe“. */
+export type HelpTab = "shortcuts" | "privacy";
+
 export interface AppState {
     /** The user's plan. Replaced as a whole on every change (autosave and later undo track it). */
     plan: Plan;
@@ -141,6 +144,8 @@ export interface AppState {
     showDimensions: boolean;
     /** Dragged shapes snap to snap lines (room center, openings, walls, shapes); a browser preference like `showDimensions`. */
     shapeSnapping: boolean;
+    /** Session-only, not part of the history: the open tab of „Hilfe“, `null` = dialog closed. */
+    helpTab: HelpTab | null;
     /** `null` = calibration mode off. */
     calibrationDraft: CalibrationDraft | null;
     /** Session-only, starts as "select". */
@@ -171,6 +176,9 @@ export interface AppState {
     toggleDimensions: () => void;
     /** Turns snapping of dragged shapes on or off and remembers it in the browser. */
     toggleShapeSnapping: () => void;
+    /** Opens „Hilfe“ on the given tab, or switches to it while open. */
+    openHelp: (tab: HelpTab) => void;
+    closeHelp: () => void;
 
     /**
      * Shape actions return `false` and leave `plan` unchanged when the change is
@@ -415,6 +423,7 @@ export function createAppStore(
                     propertiesPanelOpen: readBoolean(storage, PROPERTIES_PANEL_OPEN_KEY, true),
                     showDimensions: readBoolean(storage, SHOW_DIMENSIONS_KEY, false),
                     shapeSnapping: readBoolean(storage, SHAPE_SNAPPING_KEY, true),
+                    helpTab: null,
                     calibrationDraft: null,
                     activeTool: "select",
                     selectedShapeId: null,
@@ -450,6 +459,8 @@ export function createAppStore(
                         writeBoolean(storage, SHAPE_SNAPPING_KEY, on);
                         set({ shapeSnapping: on });
                     },
+                    openHelp: (tab) => set({ helpTab: tab }),
+                    closeHelp: () => set({ helpTab: null }),
 
                     addShape: (floorId, shape) => applyPlan((p) => planOps.addShape(p, floorId, shape, now())),
                     // The lock is enforced here, for every way of editing; the plan operations stay lock-agnostic.

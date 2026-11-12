@@ -204,6 +204,44 @@ describe("app store", () => {
         });
     });
 
+    describe("help dialog", () => {
+        it("starts closed, opens on the given tab, switches tabs and closes", () => {
+            const store = createAppStore(storedPlan());
+            expect(store.getState().helpTab).toBeNull();
+            store.getState().openHelp("privacy");
+            expect(store.getState().helpTab).toBe("privacy");
+            store.getState().openHelp("shortcuts");
+            expect(store.getState().helpTab).toBe("shortcuts");
+            store.getState().closeHelp();
+            expect(store.getState().helpTab).toBeNull();
+        });
+
+        it("is not stored in the browser", () => {
+            const storage = storedPlan();
+            const store = createAppStore(storage);
+            const before = storage.getItem(PLAN_STORAGE_KEY);
+            store.getState().openHelp("privacy");
+            expect(storage.getItem(PLAN_STORAGE_KEY)).toBe(before);
+            expect(createAppStore(storage).getState().helpTab).toBeNull();
+        });
+
+        it("opening and closing change neither the plan nor the history", () => {
+            const clock = { now: new Date("2026-11-11T09:00:00.000Z") };
+            const store = createAppStore(storedPlan((p) => addShape(p, "eg", rect(1), CREATED)), { now: () => clock.now });
+            store.getState().updateShape("eg", uuid(1), { widthCm: 250 });
+            const plan = store.getState().plan;
+            const steps = store.temporal.getState().pastStates.length;
+            store.getState().openHelp("shortcuts");
+            store.getState().openHelp("privacy");
+            store.getState().closeHelp();
+            expect(store.getState().plan).toBe(plan);
+            expect(store.temporal.getState().pastStates.length).toBe(steps);
+            // Undo takes back the width change.
+            store.getState().undo();
+            expect(store.getState().plan.shapesByFloor.eg[0]).toMatchObject({ widthCm: 200 });
+        });
+    });
+
     describe("plan", () => {
         it("starts with an empty plan with the only floor „Erdgeschoss“, without notice, when nothing is stored", () => {
             const store = createAppStore(memoryStorage(), { now, newId });

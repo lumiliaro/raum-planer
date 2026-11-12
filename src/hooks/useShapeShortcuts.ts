@@ -5,7 +5,7 @@ import { isEditableTarget, isInDialog, targetOwnsUndo } from "@/hooks/isEditable
 import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppStore } from "@/store/app-store";
 
 /**
- * Tool and shape shortcuts: the keys of `TOOLS` (V, R, E, L, U, C, G, T, F) choose a
+ * Tool and shape shortcuts: ? opens „Hilfe“, the keys of `TOOLS` (V, R, E, L, U, C, G, T, F) choose a
  * tool, Esc cancels a tool or clears the selection, Delete/Backspace
  * remove the selected shape, room or opening, PageUp/PageDown move it in the drawing order (with
  * Shift to the top/bottom), B shows or hides the active floor's underlay, M shows or hides the
@@ -17,6 +17,7 @@ import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppS
  * (calibration mode, locked shape, floor without underlay, undo while a room
  * is drawn). Keys pressed inside a dialog belong to the dialog. While a room
  * is drawn, its own keys come first (`RoomDraftLayer`).
+ * New keys must also be added to `components/help/shortcuts.ts`.
  */
 export function useShapeShortcuts() {
     useEffect(() => {
@@ -41,6 +42,13 @@ export function useShapeShortcuts() {
                 return;
             }
             if (e.ctrlKey || e.metaKey || e.altKey || isEditableTarget(e.target)) return;
+
+            // By `e.key`: Shift+ß on German, Shift+/ on US keyboards. Also while calibrating or drawing a room.
+            if (e.key === "?") {
+                e.preventDefault();
+                state.openHelp("shortcuts");
+                return;
+            }
 
             if (e.key === "PageUp" || e.key === "PageDown") {
                 const shape = selectSelectedShape(state);

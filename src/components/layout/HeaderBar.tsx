@@ -1,4 +1,4 @@
-import { House, Settings } from "lucide-react";
+import { CircleHelp, House, Settings } from "lucide-react";
 import { useState } from "react";
 import { FloorSwitcher } from "@/components/layout/FloorSwitcher";
 import { HistoryButtons } from "@/components/layout/HistoryButtons";
@@ -8,9 +8,13 @@ import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/app-store";
 
+const ICON_BUTTON_CLASS =
+    "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-zinc-700 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring";
+
 export function HeaderBar() {
     const calibrating = useAppStore((s) => s.calibrationDraft !== null);
     const endCalibration = useAppStore((s) => s.endCalibration);
+    const openHelp = useAppStore((s) => s.openHelp);
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     return (
@@ -36,12 +40,22 @@ export function HeaderBar() {
                             aria-label="Einstellungen"
                             title="Einstellungen"
                             onClick={() => setSettingsOpen(true)}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-zinc-700 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                            className={ICON_BUTTON_CLASS}
                         >
                             <Settings className="size-4" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                     </>
                 )}
+                {/* Outside the calibration branch: help stays available while calibrating. */}
+                <button
+                    type="button"
+                    aria-label="Hilfe und Tastenkürzel (?)"
+                    title="Hilfe und Tastenkürzel (?)"
+                    onClick={() => openHelp("shortcuts")}
+                    className={ICON_BUTTON_CLASS}
+                >
+                    <CircleHelp className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                </button>
             </div>
             <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </header>

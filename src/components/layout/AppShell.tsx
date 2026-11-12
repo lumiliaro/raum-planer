@@ -1,6 +1,7 @@
 import { CalibrationBanner } from "@/components/calibration/CalibrationBanner";
 import { CalibrationPanel } from "@/components/calibration/CalibrationPanel";
 import { FloorCanvas } from "@/components/canvas/FloorCanvas";
+import { HelpDialog } from "@/components/help/HelpDialog";
 import { HeaderBar } from "@/components/layout/HeaderBar";
 import { PanelToggle } from "@/components/layout/PanelToggle";
 import { PlanRecoveryBanner } from "@/components/layout/PlanRecoveryBanner";
@@ -29,6 +30,7 @@ export function AppShell() {
                 {calibrating ? <CalibrationPanel /> : panelOpen && <PropertiesPanel />}
             </div>
             <StatusBar />
+            <HelpDialog />
         </div>
     );
 }

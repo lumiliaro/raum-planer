@@ -117,7 +117,7 @@ export function FloorCanvas() {
         return () => container.removeEventListener("wheel", onWheel);
     }, [container]);
 
-    // Keyboard shortcuts: + / = zoom in, - zoom out, 0 fit.
+    // Keyboard shortcuts: + / = zoom in, - zoom out, 0 fit. New keys must also be added to `components/help/shortcuts.ts`.
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.ctrlKey || e.metaKey || e.altKey || isEditableTarget(e.target) || isInDialog(e.target)) return;

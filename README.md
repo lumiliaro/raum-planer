@@ -17,7 +17,8 @@ Netzwerkaufrufe zur Laufzeit.
 
 - Alle Pläne und Vorlagenbilder liegen nur im Browser des Besuchers
   (localStorage und IndexedDB). Es wird nichts an einen Server geschickt,
-  und jeder Browser hat seinen eigenen Stand.
+  und jeder Browser hat seinen eigenen Stand. Derselbe Hinweis steht in der
+  App unter „Hilfe → Datenschutz“.
 - Pläne aus der lokalen Entwicklung (`localhost`) erscheinen dort nicht von
   selbst: lokal exportieren und online importieren.
 - Der Browser kann seinen Speicher leeren. Ein Export dient als Sicherung.

@@ -190,7 +190,10 @@ export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
     );
 }
 
-/** Keys while a room is drawn; they go to the drawing before any other shortcut. */
+/**
+ * Keys while a room is drawn; they go to the drawing before any other shortcut.
+ * New keys must also be added to `components/help/shortcuts.ts`.
+ */
 function useRoomDraftKeys() {
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
