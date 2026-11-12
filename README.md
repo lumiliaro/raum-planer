@@ -1,8 +1,9 @@
-# Haus-Gestalter
+# Raumplaner
 
-Persönliche Web-App zur Einzugs- und Raumplanung für genau ein Haus.
-Etagen und Räume werden mit ihren Innenmaßen in cm angelegt, optional über
-einem eingescannten Grundriss als Vorlage. Möbel werden als Formen mit
+Web-App zur Raum- und Einrichtungsplanung für die eigene Wohnung oder das
+eigene Haus. Den Grundriss erstellt man selbst: Etagen anlegen und je Etage
+die Räume mit ihren Innenmaßen in cm zeichnen, optional über einem
+eingescannten Grundriss als Vorlage. Möbel werden als Formen mit
 exakten Maßen platziert, verschoben, gedreht, beschriftet und eingefärbt.
 Die Planung lässt sich als Datei exportieren und wieder importieren und als
 PDF drucken.

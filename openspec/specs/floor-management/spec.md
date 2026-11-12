@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Macht die Etagen des Hauses zu Nutzerdaten: Der Nutzer legt Etagen an, benennt sie um, ordnet sie und löscht sie, ohne dass dabei Formen oder Kalibrierungen anderer Etagen verloren gehen.
+Macht die Etagen des Plans zu Nutzerdaten: Der Nutzer legt Etagen an, benennt sie um, ordnet sie und löscht sie, ohne dass dabei Formen oder Kalibrierungen anderer Etagen verloren gehen.
 
 ## Requirements
 

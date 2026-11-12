@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Zeigt die Grundrisse der fest vorgegebenen Etagen des Hauses an und erlaubt, zwischen ihnen umzuschalten sowie die Ansicht zu zoomen und zu verschieben – als Grundlage für Kalibrierung und Möbelplanung.
+Zeigt die Grundrisse der vom Nutzer angelegten Etagen an und erlaubt, zwischen ihnen umzuschalten sowie die Ansicht zu zoomen und zu verschieben – als Grundlage für Kalibrierung und Möbelplanung.
 
 ## Requirements
 
