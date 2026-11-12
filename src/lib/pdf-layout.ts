@@ -228,3 +228,18 @@ export function formatPrintDate(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
 }
+
+/** Why creating the PDF failed: its code could not be loaded, or creating the file itself failed. */
+export type PdfFailure = "load" | "create";
+
+/** The dialog's hint for `failure`, `null` without one. */
+export function pdfFailureHint(failure: PdfFailure | null): string | null {
+    switch (failure) {
+        case "load":
+            return "PDF-Funktion konnte nicht geladen werden – bitte Seite neu laden";
+        case "create":
+            return "PDF konnte nicht erstellt werden";
+        default:
+            return null;
+    }
+}

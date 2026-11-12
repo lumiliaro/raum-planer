@@ -9,6 +9,12 @@ export default defineConfig(({ command }) => ({
     // The dev server keeps the root path.
     base: command === "build" ? "/raum-planer/" : "/",
     plugins: [react(), tailwindcss()],
+    // `jspdf` is only imported on demand (PDF export), so the dev server would
+    // discover it late and re-bundle its deps cache mid-session, which breaks
+    // the import in open tabs. Pre-bundle it at startup instead.
+    optimizeDeps: {
+        include: ["jspdf"],
+    },
     resolve: {
         alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
