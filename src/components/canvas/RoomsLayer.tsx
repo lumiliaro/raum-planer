@@ -3,11 +3,12 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Group, Layer, Line } from "react-konva";
 import { OpeningsLayer, type OpeningDrag, type SnapMark } from "@/components/canvas/OpeningsLayer";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
-import { useAltKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
+import { useAltKeyRef, useCtrlKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
 import { edgeFrame, openingGap } from "@/lib/opening-geometry";
 import type { FloorId, PointCm, Room } from "@/lib/plan-schema";
 import { roomAreaFill } from "@/lib/room-colors";
 import { labelPointCm, translatePoints, wallBandOutline } from "@/lib/room-geometry";
+import { WALL_SNAP_CAPTURE_PX, WALL_SNAP_RELEASE_PX, snapRoomDrag, type WallStick } from "@/lib/room-snap";
 import { snapDelta, snapStepCm } from "@/lib/snap";
 import { selectSelectedRoom, selectSettings, useAppStore } from "@/store/app-store";
 import { ROOM_LABEL_COLOR, SELECTION_COLOR } from "@/components/canvas/canvas-style";
@@ -20,11 +21,18 @@ const MOVE_CURSOR = "var(--cursor-move-shape)";
 
 const flat = (points: readonly PointCm[], dx = 0, dy = 0) => points.flatMap((p) => [p.x + dx, p.y + dy]);
 
-/** A room being dragged and its snapped offset in cm. */
+/** An edge of another room that the dragged room sticks to. */
+interface StuckEdge {
+    roomId: string;
+    edgeIndex: number;
+}
+
+/** A room being dragged, its snapped offset in cm and the walls it sticks to. */
 interface RoomDrag {
     id: string;
     dx: number;
     dy: number;
+    stuckEdges: StuckEdge[];
 }
 
 interface RoomsLayerProps {
@@ -52,8 +60,12 @@ interface RoomsLayerProps {
  *   highlighted edge, and on top the door and window symbols (`OpeningsLayer`).
  *
  * Only the selected, unlocked room is draggable (with "select"); dragging moves it
- * relative to its start in 5-cm steps (1 cm with Alt). The plan changes on release.
- * Dragging a locked room pans the view like dragging an unselected one.
+ * relative to its start in 5-cm steps (1 cm with Alt). Near a parallel, opposite
+ * edge of another room of the floor it sticks to that wall (`snapRoomDrag`, within
+ * 8 screen px) at the thicker wall's distance, slides along it in the grid, snaps
+ * its corners flush and tears off beyond 24 screen px across the wall; the walls
+ * it sticks to are highlighted. Ctrl switches sticking off. The plan changes on
+ * release. Dragging a locked room pans the view like dragging an unselected one.
  */
 export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId]);
@@ -63,6 +75,7 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
     const highlightedEdge = useAppStore((s) => s.highlightedEdge);
     const altRef = useAltKeyRef();
     const shiftRef = useShiftKeyRef();
+    const ctrlRef = useCtrlKeyRef();
     const selectedOpeningId = useAppStore((s) => s.selectedOpeningId);
     const [drag, setDrag] = useState<RoomDrag | null>(null);
     const [openingDrag, setOpeningDrag] = useState<OpeningDrag | null>(null);
@@ -96,6 +109,12 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
         [rooms, drag, openingDrag],
     );
 
+    const stuckEdges = (drag?.stuckEdges ?? []).flatMap(({ roomId, edgeIndex }) => {
+        const points = rooms.find((r) => r.id === roomId)?.pointsCm;
+        if (!points || edgeIndex >= points.length) return [];
+        return [{ key: `${roomId}:${edgeIndex}`, points: flat([points[edgeIndex], points[(edgeIndex + 1) % points.length]]) }];
+    });
+
     const selectedOffset = selected ? offsetOf(selected.id) : null;
     const edge =
         selected && highlightedEdge !== null && highlightedEdge < selected.pointsCm.length
@@ -121,9 +140,11 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
                         key={room.id}
                         floorId={floorId}
                         room={room}
+                        rooms={rooms}
                         scale={scale}
                         draggable={selecting && room.id === selected?.id && !room.locked}
                         altRef={altRef}
+                        ctrlRef={ctrlRef}
                         onDrag={setDrag}
                     />
                 ))}
@@ -147,6 +168,17 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
                         listening={false}
                     />
                 )}
+                {stuckEdges.map(({ key, points }) => (
+                    <Line
+                        key={`stuck-${key}`}
+                        points={points}
+                        stroke={SELECTION_COLOR}
+                        strokeWidth={4}
+                        strokeScaleEnabled={false}
+                        lineCap="round"
+                        listening={false}
+                    />
+                ))}
                 <OpeningsLayer
                     floorId={floorId}
                     rooms={rooms}
@@ -167,10 +199,14 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
 interface RoomAreaProps {
     floorId: FloorId;
     room: Room;
+    /** All rooms of the floor; the others are the walls the room sticks to. */
+    rooms: readonly Room[];
     scale: number;
     draggable: boolean;
     altRef: RefObject<boolean>;
-    /** Reports the snapped offset while dragging, `null` when the drag ends. */
+    /** Ctrl held: no sticking to walls. */
+    ctrlRef: RefObject<boolean>;
+    /** Reports the snapped offset and stuck walls while dragging, `null` when the drag ends. */
     onDrag: (drag: RoomDrag | null) => void;
 }
 
@@ -179,13 +215,21 @@ interface DragStart {
     abs: Konva.Vector2d;
     /** Last snapped offset in cm, used on release. */
     snappedCm: PointCm;
+    /** Walls the room sticks to after the last pointer move. */
+    sticks: WallStick[];
 }
+
+const stickKey = (sticks: readonly WallStick[]) => sticks.map((s) => `${s.roomId}:${s.edgeIndex}`).join("|");
 
 /**
  * One room's area and name; the group sits at (0, 0) because the corners are
  * absolute. Not draggable while locked, so a drag on it moves the stage.
+ * While dragged, the offset follows the grid; across a wall of another room it
+ * sticks (`snapRoomDrag`): captured within 8 screen px, torn off beyond 24 px,
+ * corners flush along the wall. The sticks live in `dragRef` between pointer
+ * moves. With Ctrl held only the grid applies and all sticks are dropped.
  */
-function RoomArea({ floorId, room, scale, draggable, altRef, onDrag }: RoomAreaProps) {
+function RoomArea({ floorId, room, rooms, scale, draggable, altRef, ctrlRef, onDrag }: RoomAreaProps) {
     const moveRoom = useAppStore((s) => s.moveRoom);
     const settings = useAppStore(selectSettings);
     const groupRef = useRef<Konva.Group>(null);
@@ -209,16 +253,36 @@ function RoomArea({ floorId, room, scale, draggable, altRef, onDrag }: RoomAreaP
     const cmPerScreenPx = 1 / scale;
 
     const dragBound = function (this: Konva.Node, pos: Konva.Vector2d): Konva.Vector2d {
-        dragRef.current ??= { abs: this.absolutePosition(), snappedCm: { x: 0, y: 0 } };
+        dragRef.current ??= { abs: this.absolutePosition(), snappedCm: { x: 0, y: 0 }, sticks: [] };
         const drag = dragRef.current;
         const step = snapStepCm(altRef.current, settings);
-        const snappedCm = {
-            x: snapDelta((pos.x - drag.abs.x) * cmPerScreenPx, step),
-            y: snapDelta((pos.y - drag.abs.y) * cmPerScreenPx, step),
+        const rawDelta = {
+            x: (pos.x - drag.abs.x) * cmPerScreenPx,
+            y: (pos.y - drag.abs.y) * cmPerScreenPx,
         };
-        if (snappedCm.x !== drag.snappedCm.x || snappedCm.y !== drag.snappedCm.y) {
+        const gridDelta = { x: snapDelta(rawDelta.x, step), y: snapDelta(rawDelta.y, step) };
+        const { delta: snappedCm, sticks } = ctrlRef.current
+            ? { delta: gridDelta, sticks: [] }
+            : snapRoomDrag({
+                  points: room.pointsCm,
+                  wallThicknessCm: room.wallThicknessCm,
+                  others: rooms.filter((r) => r.id !== room.id),
+                  rawDelta,
+                  gridDelta,
+                  sticks: drag.sticks,
+                  captureCm: WALL_SNAP_CAPTURE_PX * cmPerScreenPx,
+                  releaseCm: WALL_SNAP_RELEASE_PX * cmPerScreenPx,
+              });
+        const sticksChanged = stickKey(sticks) !== stickKey(drag.sticks);
+        drag.sticks = sticks;
+        if (sticksChanged || snappedCm.x !== drag.snappedCm.x || snappedCm.y !== drag.snappedCm.y) {
             drag.snappedCm = snappedCm;
-            onDrag({ id: room.id, dx: snappedCm.x, dy: snappedCm.y });
+            onDrag({
+                id: room.id,
+                dx: snappedCm.x,
+                dy: snappedCm.y,
+                stuckEdges: sticks.map(({ roomId, edgeIndex }) => ({ roomId, edgeIndex })),
+            });
         }
         return {
             x: drag.abs.x + snappedCm.x / cmPerScreenPx,
@@ -227,7 +291,7 @@ function RoomArea({ floorId, room, scale, draggable, altRef, onDrag }: RoomAreaP
     };
 
     const onDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
-        dragRef.current = { abs: e.target.absolutePosition(), snappedCm: { x: 0, y: 0 } };
+        dragRef.current = { abs: e.target.absolutePosition(), snappedCm: { x: 0, y: 0 }, sticks: [] };
     };
 
     const onDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
