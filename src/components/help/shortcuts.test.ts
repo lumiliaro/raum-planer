@@ -40,11 +40,13 @@ describe("SHORTCUT_GROUPS", () => {
 
     it("lists the keys while drawing a room", () => {
         expect(group("Raum zeichnen").entries).toEqual([
-            { keys: ["Ziffern"], description: "Länge in cm eingeben" },
+            { keys: ["Ziffern"], description: "Länge in cm eingeben, vor dem ersten Eckpunkt an einer Wand Abstand auf der Wand" },
             { keys: ["Enter"], description: "Eckpunkt setzen, bei leerem Feld Umriss schließen" },
+            { keys: ["Tab"], description: "Abstand vom anderen Wandende messen" },
             { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Eckpunkt löschen" },
+            { keys: ["Alt"], description: "Startpunkt auf der Wand in Schritten von 1 cm statt 5 cm" },
             { keys: ["Umschalt"], description: "Kante ohne Einrasten auf 0°/90°/180°/270°" },
-            { keys: ["Strg"], description: "Ohne Hilfslinien" },
+            { keys: ["Strg"], description: "Ohne Hilfslinien und ohne Einrasten an Wänden" },
             { keys: ["Esc"], description: "Umriss verwerfen" },
         ]);
     });

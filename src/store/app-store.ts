@@ -16,7 +16,18 @@ import { createOpening, nearestRoomEdge, newOpeningSnap } from "@/lib/opening-pl
 import * as planOps from "@/lib/plan";
 import { sameContent } from "@/lib/plan-diff";
 import { TUTORIAL_STEPS } from "@/components/tutorial/tutorial-steps";
-import { canAppendPoint, canClose, pointAtDistance, roundPointCm, type Direction } from "@/lib/room-drawing";
+import {
+    canAppendPoint,
+    canClose,
+    parseOffsetCm,
+    pointAtDistance,
+    pointOnWall,
+    roundPointCm,
+    wallLineFor,
+    type Direction,
+    type WallAnchor,
+} from "@/lib/room-drawing";
+import { GEOMETRY_EPS_CM } from "@/lib/room-geometry";
 import type { PlanSettings, SettingsPatch } from "@/lib/plan-settings";
 import {
     PlanSchema,
@@ -95,15 +106,17 @@ export interface OpeningSnapOptions {
     snapToleranceCm: number;
 }
 
-export type RoomDraftHint = "length" | "close";
+export type RoomDraftHint = "length" | "close" | "wallTooLong";
 
 /** A room being drawn with the tool „Raum“: session-only, not in the history. */
 export interface RoomDraft {
-    /** Corners set so far (at least one), rounded to 0.1 cm. */
+    /** Corners set so far, rounded to 0.1 cm; none only while a distance on a wall is typed (`wallAnchor`). */
     points: PointCm[];
-    /** Raw text of the length field; empty = field closed. */
+    /** Raw text of the length field (with `wallAnchor`: the distance on the wall); empty = field closed. */
     lengthText: string;
     hint: RoomDraftHint | null;
+    /** Before the first corner: the wall line and end the typed distance is measured on/from. */
+    wallAnchor: WallAnchor | null;
 }
 
 /** Why the stored plan was replaced by an empty one at start; `null` = nothing to report. */
@@ -298,6 +311,7 @@ export interface AppState {
     addDraftPoint: (point: PointCm) => boolean;
     /** Removes the last corner; the draft ends with the first one. */
     removeLastDraftPoint: () => void;
+    /** Sets the field's text; an empty distance field (no corner yet) ends the draft. */
     setDraftLength: (text: string) => void;
     /**
      * Sets a corner at the typed length from the last one in `direction` and
@@ -312,6 +326,20 @@ export interface AppState {
      */
     closeDraft: () => boolean;
     cancelDraft: () => void;
+    /**
+     * Before the first corner: opens the field „Abstand“ with `text`, fixed on
+     * the anchor's wall line and end. `false` if the tool is not active or a
+     * draft already exists.
+     */
+    startWallOffset: (anchor: WallAnchor, text: string) => boolean;
+    /** Measures the typed distance from the other end of the wall. */
+    toggleWallOffsetEnd: () => void;
+    /**
+     * Sets the first corner at the typed distance from the anchor's end. `false`
+     * (field stays) for an invalid text or a distance over the edge's length
+     * (with hint); discards the draft if the wall line is gone.
+     */
+    commitWallOffset: () => boolean;
 
     /**
      * Replaces the whole plan (import), including calibrations, timestamps and
@@ -721,7 +749,7 @@ export function createAppStore(
                         const rounded = roundPointCm(point);
                         const points = state.roomDraft?.points ?? [];
                         if (!canAppendPoint(points, rounded)) return false;
-                        set({ roomDraft: { points: [...points, rounded], lengthText: "", hint: null } });
+                        set({ roomDraft: { points: [...points, rounded], lengthText: "", hint: null, wallAnchor: null } });
                         return true;
                     },
                     removeLastDraftPoint: () => {
@@ -730,10 +758,14 @@ export function createAppStore(
                         const points = draft.points.slice(0, -1);
                         set({ roomDraft: points.length > 0 ? { ...draft, points, hint: null } : null });
                     },
-                    setDraftLength: (text) => updateRoomDraft((draft) => ({ ...draft, lengthText: text, hint: null })),
+                    setDraftLength: (text) => {
+                        const draft = get().roomDraft;
+                        if (draft?.wallAnchor && !text) set({ roomDraft: null });
+                        else updateRoomDraft((d) => ({ ...d, lengthText: text, hint: null }));
+                    },
                     commitDraftLength: (direction) => {
                         const draft = get().roomDraft;
-                        if (!draft || !direction) return false;
+                        if (!draft || !direction || draft.points.length === 0) return false;
                         const lengthCm = parseLengthCm(draft.lengthText);
                         if (lengthCm === null) {
                             set({ roomDraft: { ...draft, hint: "length" } });
@@ -741,7 +773,7 @@ export function createAppStore(
                         }
                         const point = pointAtDistance(draft.points[draft.points.length - 1], direction, lengthCm);
                         if (!canAppendPoint(draft.points, point)) return false;
-                        set({ roomDraft: { points: [...draft.points, point], lengthText: "", hint: null } });
+                        set({ roomDraft: { points: [...draft.points, point], lengthText: "", hint: null, wallAnchor: null } });
                         return true;
                     },
                     closeDraft: () => {
@@ -770,6 +802,43 @@ export function createAppStore(
                         return true;
                     },
                     cancelDraft: () => set({ roomDraft: null }),
+                    startWallOffset: (anchor, text) => {
+                        const state = get();
+                        if (state.activeTool !== "room" || !isToolEnabled(state, "room") || state.roomDraft) return false;
+                        set({ roomDraft: { points: [], lengthText: text, hint: null, wallAnchor: { ...anchor } } });
+                        return true;
+                    },
+                    toggleWallOffsetEnd: () =>
+                        updateRoomDraft((draft) =>
+                            draft.wallAnchor
+                                ? {
+                                      ...draft,
+                                      hint: null,
+                                      wallAnchor: {
+                                          ...draft.wallAnchor,
+                                          fromEnd: draft.wallAnchor.fromEnd === "start" ? "end" : "start",
+                                      },
+                                  }
+                                : draft,
+                        ),
+                    commitWallOffset: () => {
+                        const { roomDraft: draft, plan } = get();
+                        if (!draft?.wallAnchor) return false;
+                        const line = wallLineFor(plan.roomsByFloor[plan.activeFloorId] ?? [], draft.wallAnchor);
+                        if (!line) {
+                            set({ roomDraft: null });
+                            return false;
+                        }
+                        const offsetCm = parseOffsetCm(draft.lengthText);
+                        if (offsetCm === null) return false;
+                        if (offsetCm > line.lengthCm + GEOMETRY_EPS_CM) {
+                            set({ roomDraft: { ...draft, hint: "wallTooLong" } });
+                            return false;
+                        }
+                        const point = pointOnWall(line, draft.wallAnchor.fromEnd, Math.min(offsetCm, line.lengthCm));
+                        set({ roomDraft: { points: [point], lengthText: "", hint: null, wallAnchor: null } });
+                        return true;
+                    },
 
                     replacePlan: (next) => {
                         const parsed = PlanSchema.safeParse(next);

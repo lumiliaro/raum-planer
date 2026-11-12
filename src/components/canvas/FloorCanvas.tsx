@@ -18,7 +18,8 @@ import { edgeFrame } from "@/lib/opening-geometry";
 import { EDGE_HIT_TOLERANCE_PX, nearestRoomEdge, newOpeningSnap } from "@/lib/opening-placement";
 import { SNAP_POINT_TOLERANCE_PX } from "@/lib/opening-snap";
 import type { PointCm } from "@/lib/plan-schema";
-import { CORNER_SNAP_RADIUS_PX, resolveDraftPointer } from "@/lib/room-drawing";
+import { CORNER_SNAP_RADIUS_PX, resolveDraftPointer, wallLines } from "@/lib/room-drawing";
+import { snapStepCm } from "@/lib/snap";
 import { cmToImagePoint } from "@/lib/underlay";
 import { fitViewport, screenToWorld, wheelFactor, zoomAt, zoomAtCenter, ZOOM_STEP } from "@/lib/viewport";
 import { isOpeningTool, OPENING_KIND_OF_TOOL, selectSettings, useAppStore } from "@/store/app-store";
@@ -42,6 +43,7 @@ export function FloorCanvas() {
     const underlay = useAppStore((s) => s.plan.underlayByFloor[floorId]);
     const shapes = useAppStore((s) => s.plan.shapesByFloor[floorId]);
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId]);
+    const walls = useMemo(() => wallLines(rooms), [rooms]);
     const activeTool = useAppStore((s) => s.activeTool);
     const insertShape = useAppStore((s) => s.insertShape);
     const insertOpening = useAppStore((s) => s.insertOpening);
@@ -158,16 +160,20 @@ export function FloorCanvas() {
                 addCalibrationPoint(px);
             }
         } else if (activeTool === "room") {
-            // Next corner: a corner nearby wins, else the edge in the snapped direction (Shift: free),
-            // then guides through other corners („Einrasten“ on, Ctrl not held). Same as the preview.
+            // Next corner: a corner nearby wins, then (first corner only) a wall position (Alt: fine steps),
+            // else the edge in the snapped direction (Shift: free), then guides through other corners
+            // („Einrasten“ on, Ctrl not held). Same as the preview; an open field „Abstand“ is replaced.
             if (!pt || !vp) return;
             const { roomDraft } = useAppStore.getState();
             const corners = rooms.flatMap((room) => room.pointsCm);
             const radiusCm = CORNER_SNAP_RADIUS_PX / vp.scale;
+            const snapOn = shapeSnapping && !e.evt.ctrlKey;
             const next = resolveDraftPointer(roomDraft?.points ?? [], pt, corners, {
                 radiusCm,
                 free: e.evt.shiftKey,
-                guides: shapeSnapping && !e.evt.ctrlKey,
+                guides: snapOn,
+                walls: snapOn ? walls : null,
+                stepCm: snapStepCm(e.evt.altKey, settings),
             });
             if (next.closes) closeDraft();
             else if (next.point) addDraftPoint(next.point);
