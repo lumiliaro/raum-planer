@@ -4,14 +4,20 @@ import {
     canClose,
     draftGuideSources,
     edgeEndAtPointer,
+    parseOffsetCm,
     pointAtDistance,
+    pointOnWall,
     resolveDraftPointer,
     roundPointCm,
     snapDirection,
     snapToCorner,
     snapToGuides,
+    snapToWall,
+    wallDistances,
+    wallLines,
+    type WallLine,
 } from "@/lib/room-drawing";
-import type { PointCm } from "@/lib/plan-schema";
+import type { PointCm, Room } from "@/lib/plan-schema";
 
 const pts = (...coords: [number, number][]): PointCm[] => coords.map(([x, y]) => ({ x, y }));
 const p = (x: number, y: number): PointCm => ({ x, y });
@@ -185,7 +191,7 @@ describe("resolveDraftPointer", () => {
     const roomCorners = pts([350, 0], [700, 0]);
     /** 8 screen px at 100 % zoom. */
     const radius = 8;
-    const opts = (free = false, guides = true) => ({ radiusCm: radius, free, guides });
+    const opts = (free = false, guides = true) => ({ radiusCm: radius, free, guides, walls: null, stepCm: 5 });
 
     it("puts the start point exactly on a room corner 5 screen px away", () => {
         expect(resolveDraftPointer([], p(354, 3), roomCorners, opts())).toEqual({
@@ -285,5 +291,180 @@ describe("resolveDraftPointer", () => {
             // Guide x = 300 through (300, 0) would collapse the edge from (300, 200).
             expect(resolveDraftPointer(three, p(295, 201), [], opts()).point).toEqual({ x: 295, y: 200 });
         });
+    });
+});
+
+const room = (id: string, points: PointCm[], thickness: number | number[] = 15): Room => ({
+    id,
+    name: id,
+    pointsCm: points,
+    openings: [],
+    wallThicknessCm: Array.isArray(thickness) ? thickness : points.map(() => thickness),
+    color: null,
+    locked: false,
+});
+
+/** „Wohnen“: 500 cm × 400 cm, clockwise on screen, 15 cm walls. */
+const WOHNEN = room("wohnen", pts([0, 0], [500, 0], [500, 400], [0, 400]));
+const line = (lines: WallLine[], edgeIndex: number, face: "inner" | "outer") =>
+    lines.find((l) => l.edgeIndex === edgeIndex && l.face === face)!;
+
+describe("wallLines", () => {
+    it("gives the inner and outer line of each edge; the top outer line runs at y = −15 cm", () => {
+        const lines = wallLines([WOHNEN]);
+        expect(lines).toHaveLength(8);
+        expect(line(lines, 0, "inner")).toEqual({
+            roomId: "wohnen",
+            edgeIndex: 0,
+            face: "inner",
+            start: { x: 0, y: 0 },
+            end: { x: 500, y: 0 },
+            lengthCm: 500,
+            outwardNormal: { x: 0, y: -1 },
+        });
+        expect(line(lines, 0, "outer")).toMatchObject({ start: { x: 0, y: -15 }, end: { x: 500, y: -15 }, lengthCm: 500 });
+        expect(line(lines, 1, "outer")).toMatchObject({ start: { x: 515, y: 0 }, end: { x: 515, y: 400 } });
+    });
+
+    it("puts the outer side outside for a counter-clockwise room too", () => {
+        const ccw = room("ccw", pts([0, 0], [0, 400], [500, 400], [500, 0]));
+        const top = wallLines([ccw]).find((l) => l.face === "outer" && l.start.y < 0)!;
+        expect(top).toMatchObject({ edgeIndex: 3, start: { x: 500, y: -15 }, end: { x: 0, y: -15 } });
+    });
+
+    it("moves each edge by its own wall thickness", () => {
+        const lines = wallLines([room("w", pts([0, 0], [500, 0], [500, 400], [0, 400]), [36.5, 24, 15, 11.5])]);
+        expect(line(lines, 0, "outer").start).toEqual({ x: 0, y: -36.5 });
+        expect(line(lines, 1, "outer").start).toEqual({ x: 524, y: 0 });
+        expect(line(lines, 3, "outer").start).toEqual({ x: -11.5, y: 400 });
+    });
+
+    it("leaves out edges of 0 cm", () => {
+        const lines = wallLines([room("z", pts([0, 0], [500, 0], [500, 0], [500, 400], [0, 400]))]);
+        expect(lines.map((l) => l.edgeIndex)).not.toContain(1);
+        expect(lines).toHaveLength(8);
+    });
+});
+
+describe("snapToWall", () => {
+    const lines = wallLines([WOHNEN]);
+    const snap = (x: number, y: number, stepCm = 5) => snapToWall(p(x, y), lines, { radiusCm: 8, stepCm });
+
+    it("snaps (262 cm, −17 cm) to (260 cm, −15 cm) on the outer side, 240 cm from the nearer right end", () => {
+        expect(snap(262, -17)).toMatchObject({
+            line: { edgeIndex: 0, face: "outer" },
+            fromEnd: "end",
+            offsetCm: 240,
+            point: { x: 260, y: -15 },
+        });
+        expect(snap(237, -17)).toMatchObject({ fromEnd: "start", offsetCm: 235, point: { x: 235, y: -15 } });
+    });
+
+    it("snaps (262 cm, 4 cm) to (260 cm, 0 cm) on the inner side", () => {
+        expect(snap(262, 4)).toMatchObject({ line: { edgeIndex: 0, face: "inner" }, point: { x: 260, y: 0 } });
+    });
+
+    it("counts from the nearer end: (437 cm, −14 cm) → (435 cm, −15 cm), 65 cm from the right end", () => {
+        expect(snap(437, -14)).toMatchObject({ fromEnd: "end", offsetCm: 65, point: { x: 435, y: -15 } });
+    });
+
+    it("snaps in 1-cm steps with Alt: (262,4 cm, −17 cm) → (262 cm, −15 cm)", () => {
+        expect(snap(262.4, -17, 1)?.point).toEqual({ x: 262, y: -15 });
+    });
+
+    it("snaps on a slanted edge from (0, 0) to (300, 400): 262 cm along → (156 cm, 208 cm)", () => {
+        const slanted = wallLines([room("s", pts([0, 0], [300, 400], [0, 400]))]);
+        const position = snapToWall(p(157.2, 209.6), slanted, { radiusCm: 8, stepCm: 5 });
+        expect(position).toMatchObject({ point: { x: 156, y: 208 } });
+        expect(wallDistances(position!)).toEqual({ fromStartCm: 260, fromEndCm: 240 });
+    });
+
+    it("is null beside the end of a wall or too far away", () => {
+        expect(snap(530, -15)).toBeNull();
+        expect(snap(262, -60)).toBeNull();
+    });
+
+    it("takes the nearest of two lines", () => {
+        // A 6-cm wall: both sides are within reach; the nearer one wins.
+        const thin = wallLines([room("t", pts([0, 0], [500, 0], [500, 400], [0, 400]), 6)]);
+        expect(snapToWall(p(100, -4), thin, { radiusCm: 8, stepCm: 5 })).toMatchObject({ line: { face: "outer" } });
+        expect(snapToWall(p(100, -2), thin, { radiusCm: 8, stepCm: 5 })).toMatchObject({ line: { face: "inner" } });
+    });
+
+    it("keeps the point on the line", () => {
+        expect(snap(499, -15, 7)).toMatchObject({ fromEnd: "end", offsetCm: 0, point: { x: 500, y: -15 } });
+        const short = wallLines([room("k", pts([0, 0], [12, 0], [12, 400], [0, 400]))]);
+        expect(snapToWall(p(5.9, -15), short, { radiusCm: 8, stepCm: 10 })).toMatchObject({ offsetCm: 10, point: { x: 10, y: -15 } });
+    });
+});
+
+describe("pointOnWall, wallDistances and parseOffsetCm", () => {
+    const top = line(wallLines([WOHNEN]), 0, "outer");
+
+    it("puts 260 cm from the left end at (260 cm, −15 cm), from the right end at (240 cm, −15 cm)", () => {
+        expect(pointOnWall(top, "start", 260)).toEqual({ x: 260, y: -15 });
+        expect(pointOnWall(top, "end", 260)).toEqual({ x: 240, y: -15 });
+    });
+
+    it("puts 0 cm on the reference end", () => {
+        expect(pointOnWall(top, "start", 0)).toEqual({ x: 0, y: -15 });
+        expect(pointOnWall(top, "end", 0)).toEqual({ x: 500, y: -15 });
+    });
+
+    it("gives both distances", () => {
+        expect(wallDistances({ line: top, fromEnd: "start", offsetCm: 260, point: p(260, -15) })).toEqual({
+            fromStartCm: 260,
+            fromEndCm: 240,
+        });
+        expect(wallDistances({ line: top, fromEnd: "end", offsetCm: 65, point: p(435, -15) })).toEqual({
+            fromStartCm: 435,
+            fromEndCm: 65,
+        });
+    });
+
+    it("parses „260“, „12,5“, „12.5“ and „0“; rejects empty and other text", () => {
+        expect(parseOffsetCm("260")).toBe(260);
+        expect(parseOffsetCm("12,5")).toBe(12.5);
+        expect(parseOffsetCm("12.5")).toBe(12.5);
+        expect(parseOffsetCm("0")).toBe(0);
+        expect(parseOffsetCm("")).toBeNull();
+        expect(parseOffsetCm("12,")).toBeNull();
+        expect(parseOffsetCm("-5")).toBeNull();
+    });
+});
+
+describe("resolveDraftPointer with walls", () => {
+    const wohnenLines = wallLines([WOHNEN]);
+    const wallOpts = (walls: WallLine[] | null = wohnenLines, stepCm = 5) => ({
+        radiusCm: 8,
+        free: false,
+        guides: true,
+        walls,
+        stepCm,
+    });
+
+    it("lets a room corner win over the wall position at (497 cm, 3 cm)", () => {
+        const resolved = resolveDraftPointer([], p(497, 3), WOHNEN.pointsCm, wallOpts());
+        expect(resolved).toEqual({ point: { x: 500, y: 0 }, snapped: true, closes: false, guides: [] });
+    });
+
+    it("lets the wall position win over a guide (corner of „Bad“ at x = 263 cm)", () => {
+        const corners = [...WOHNEN.pointsCm, p(263, -300)];
+        const resolved = resolveDraftPointer([], p(262, -17), corners, wallOpts());
+        expect(resolved.point).toEqual({ x: 260, y: -15 });
+        expect(resolved.guides).toEqual([]);
+        expect(resolved.wall).toMatchObject({ offsetCm: 240, fromEnd: "end" });
+    });
+
+    it("has no wall position with walls off", () => {
+        const resolved = resolveDraftPointer([], p(262, -17), WOHNEN.pointsCm, wallOpts(null));
+        expect(resolved.point).toEqual({ x: 262, y: -17 });
+        expect(resolved.wall).toBeUndefined();
+    });
+
+    it("has no wall position from the second corner on", () => {
+        const resolved = resolveDraftPointer(pts([100, -200]), p(102, -17), WOHNEN.pointsCm, wallOpts());
+        expect(resolved.point).toEqual({ x: 100, y: -17 });
+        expect(resolved.wall).toBeUndefined();
     });
 });

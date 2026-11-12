@@ -50,7 +50,7 @@ Solange der Startpunkt an einer Wandlinie eingerastet ist, SHALL die Zeichenflä
 #### Scenario: 260 cm auf einer 500-cm-Wand
 - **GIVEN** der Raum „Wohnen“ mit den Ecken (0 cm, 0 cm), (500 cm, 0 cm), (500 cm, 400 cm), (0 cm, 400 cm) und 15 cm Wanddicke, der Zoom steht auf 100 % und noch kein Eckpunkt ist gesetzt
 - **WHEN** der Nutzer den Mauszeiger nach (262 cm, −17 cm) bewegt
-- **THEN** ist bei (260 cm, −15 cm) ein Ring zu sehen und bei (0 cm, −15 cm) ein gefüllter Punkt
+- **THEN** ist bei (260 cm, −15 cm) ein Ring zu sehen und bei (500 cm, −15 cm) ein gefüllter Punkt
 - **AND** zwischen (0 cm, −15 cm) und dem Ring steht „260 cm“ waagerecht, zwischen dem Ring und (500 cm, −15 cm) steht „240 cm“
 - **WHEN** er den Mauszeiger nach (262 cm, −60 cm) bewegt
 - **THEN** ist weder Ring noch Abstand zu sehen

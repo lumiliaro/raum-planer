@@ -4,8 +4,9 @@
  * corner may be set or the outline closed. All in cm.
  */
 
-import type { PointCm } from "@/lib/plan-schema";
+import type { PointCm, Room } from "@/lib/plan-schema";
 import {
+    DEFAULT_WALL_THICKNESS_CM,
     distanceCm,
     GEOMETRY_EPS_CM,
     hasNoZeroEdges,
@@ -14,6 +15,7 @@ import {
     roundPointCm,
     segmentsIntersect,
 } from "@/lib/room-geometry";
+import { edgeOutwardNormals } from "@/lib/room-snap";
 
 export { roundPointCm };
 
@@ -152,6 +154,149 @@ export function snapToGuides(
     return { point: roundPointCm(result), guides };
 }
 
+/** One side of a room's wall: the edge itself (`inner`) or the edge moved outwards by its wall thickness (`outer`). */
+export interface WallLine {
+    roomId: string;
+    edgeIndex: number;
+    face: "inner" | "outer";
+    /** At the edge's start corner (`outer`: moved outwards, not the mitred corner of the wall band). */
+    start: PointCm;
+    end: PointCm;
+    /** Length of the edge in cm, the same on both sides. */
+    lengthCm: number;
+    /** Unit normal pointing out of the room. */
+    outwardNormal: PointCm;
+}
+
+/** The end of a wall line a position is measured from. */
+export type WallEnd = "start" | "end";
+
+/** A point on a wall line, `offsetCm` from the end `fromEnd`. */
+export interface WallPosition {
+    line: WallLine;
+    fromEnd: WallEnd;
+    offsetCm: number;
+    /** The point, rounded to 0.1 cm. */
+    point: PointCm;
+}
+
+/** Rounds to 0.1 cm (never `-0`). */
+const roundCm = (value: number): number => Math.round(value * 10) / 10 + 0;
+
+/**
+ * The wall lines of all rooms: per edge longer than 0 cm the edge itself and
+ * the edge moved outwards by its wall thickness.
+ */
+export function wallLines(rooms: readonly Room[]): WallLine[] {
+    const lines: WallLine[] = [];
+    for (const room of rooms) {
+        const points = room.pointsCm;
+        const normals = edgeOutwardNormals(points);
+        points.forEach((start, edgeIndex) => {
+            const normal = normals[edgeIndex];
+            if (!normal) return;
+            const end = points[(edgeIndex + 1) % points.length];
+            const lengthCm = distanceCm(start, end);
+            const thickness = room.wallThicknessCm[edgeIndex] ?? DEFAULT_WALL_THICKNESS_CM;
+            const shift = (p: PointCm): PointCm => ({ x: p.x + normal.x * thickness, y: p.y + normal.y * thickness });
+            const outwardNormal = { ...normal };
+            lines.push({ roomId: room.id, edgeIndex, face: "inner", start: { ...start }, end: { ...end }, lengthCm, outwardNormal });
+            lines.push({
+                roomId: room.id,
+                edgeIndex,
+                face: "outer",
+                start: shift(start),
+                end: shift(end),
+                lengthCm,
+                outwardNormal,
+            });
+        });
+    }
+    return lines;
+}
+
+/** The point on `line` `offsetCm` from the end `fromEnd`, rounded to 0.1 cm. */
+export function pointOnWall(line: WallLine, fromEnd: WallEnd, offsetCm: number): PointCm {
+    const [from, to] = fromEnd === "start" ? [line.start, line.end] : [line.end, line.start];
+    const f = line.lengthCm > 0 ? offsetCm / line.lengthCm : 0;
+    return roundPointCm({ x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f });
+}
+
+/** Distances of a wall position to the start and the end of its line, in cm (0.1 cm). */
+export function wallDistances(position: WallPosition): { fromStartCm: number; fromEndCm: number } {
+    const { line, fromEnd, offsetCm } = position;
+    const fromStartCm = roundCm(fromEnd === "start" ? offsetCm : line.lengthCm - offsetCm);
+    return { fromStartCm, fromEndCm: roundCm(line.lengthCm - fromStartCm) };
+}
+
+/**
+ * The wall position for the pointer: on the nearest wall line at most
+ * `radiusCm` across and between its ends (the earlier line on a tie). The
+ * distance from the nearer end is rounded to `stepCm` and kept on the line.
+ * `null` if no line is near.
+ */
+export function snapToWall(
+    pointer: PointCm,
+    lines: readonly WallLine[],
+    { radiusCm, stepCm }: { radiusCm: number; stepCm: number },
+): WallPosition | null {
+    let best: { line: WallLine; t: number } | null = null;
+    let bestDistance = Infinity;
+    for (const line of lines) {
+        const length = line.lengthCm;
+        if (length <= 0) continue;
+        const dx = (line.end.x - line.start.x) / length;
+        const dy = (line.end.y - line.start.y) / length;
+        const rx = pointer.x - line.start.x;
+        const ry = pointer.y - line.start.y;
+        const t = rx * dx + ry * dy;
+        if (t < 0 || t > length) continue;
+        const across = Math.abs(rx * dy - ry * dx);
+        if (across <= radiusCm && across < bestDistance) {
+            best = { line, t };
+            bestDistance = across;
+        }
+    }
+    if (!best) return null;
+    const { line, t } = best;
+    const fromEnd: WallEnd = t <= line.lengthCm / 2 ? "start" : "end";
+    const raw = fromEnd === "start" ? t : line.lengthCm - t;
+    const offsetCm = roundCm(Math.min(line.lengthCm, Math.max(0, Math.round(raw / stepCm) * stepCm)));
+    return { line, fromEnd, offsetCm, point: pointOnWall(line, fromEnd, offsetCm) };
+}
+
+/** The wall line a typed distance is measured on, and the end it is measured from. */
+export interface WallAnchor {
+    roomId: string;
+    edgeIndex: number;
+    face: WallLine["face"];
+    fromEnd: WallEnd;
+}
+
+/** The anchor of a wall position (its line and reference end). */
+export function wallAnchorOf({ line, fromEnd }: WallPosition): WallAnchor {
+    return { roomId: line.roomId, edgeIndex: line.edgeIndex, face: line.face, fromEnd };
+}
+
+/** The anchor's wall line, computed from the current rooms; `null` if the room or edge is gone. */
+export function wallLineFor(rooms: readonly Room[], anchor: WallAnchor): WallLine | null {
+    const room = rooms.find((r) => r.id === anchor.roomId);
+    if (!room) return null;
+    return (
+        wallLines([room]).find((l) => l.edgeIndex === anchor.edgeIndex && l.face === anchor.face) ?? null
+    );
+}
+
+const OFFSET_PATTERN = /^\d+([.,]\d+)?$/;
+
+/** A typed distance on a wall: `"12,5"` / `"12.5"` → `12.5`, `"0"` → `0`; empty or non-numeric → `null`. */
+export function parseOffsetCm(text: string): number | null {
+    const trimmed = text.trim();
+    if (!OFFSET_PATTERN.test(trimmed)) return null;
+    const value = Number(trimmed.replace(",", "."));
+    return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 /** What a click at the pointer would do while drawing a room. */
 export interface DraftPointer {
     /** The corner a click would set; `null` if the pointer lies on the last corner. */
@@ -162,6 +307,8 @@ export interface DraftPointer {
     closes: boolean;
     /** The guides `point` snapped to (0–2), drawn dashed while drawing. */
     guides: DraftGuide[];
+    /** The first corner snapped onto a wall line (shown with its distances to the wall ends). */
+    wall?: WallPosition;
 }
 
 export interface DraftPointerOptions {
@@ -171,11 +318,16 @@ export interface DraftPointerOptions {
     free: boolean;
     /** Snap to guides („Einrasten“ on and Ctrl not held). */
     guides: boolean;
+    /** Wall lines the first corner snaps onto; `null` = off (Ctrl held or „Einrasten“ off). */
+    walls: readonly WallLine[] | null;
+    /** Step along a wall line in cm (fine step while Alt is held). */
+    stepCm: number;
 }
 
 /**
  * The next corner for the pointer: the start point or a room corner within
- * `radiusCm` wins; otherwise the end of the edge in the snapped direction
+ * `radiusCm` wins; then, for the first corner only, a position on one of
+ * `walls` within `radiusCm` (no guides); otherwise the end of the edge in the snapped direction
  * (`free`: the pointer itself), the first corner being the rounded pointer.
  * With `guides` that point then snaps to guides through the other corners:
  * on a straight edge only across the edge, so it stays straight; for the
@@ -185,7 +337,7 @@ export function resolveDraftPointer(
     points: readonly PointCm[],
     pointer: PointCm,
     roomCorners: readonly PointCm[],
-    { radiusCm, free, guides }: DraftPointerOptions,
+    { radiusCm, free, guides, walls, stepCm }: DraftPointerOptions,
 ): DraftPointer {
     const start = points[0];
     const corner = snapToCorner(pointer, start ? [start, ...roomCorners] : roomCorners, radiusCm);
@@ -193,6 +345,10 @@ export function resolveDraftPointer(
         const point = roundPointCm(corner);
         const closes = points.length >= 3 && point.x === start.x && point.y === start.y;
         return { point, snapped: true, closes, guides: [] };
+    }
+    if (points.length === 0 && walls) {
+        const wall = snapToWall(pointer, walls, { radiusCm, stepCm });
+        if (wall) return { point: wall.point, snapped: false, closes: false, guides: [], wall };
     }
     const last = points.at(-1);
     const end = last ? edgeEndAtPointer(last, pointer, free) : roundPointCm(pointer);

@@ -1568,6 +1568,7 @@ describe("app store", () => {
                 ],
                 lengthText: "",
                 hint: null,
+                wallAnchor: null,
             });
         });
 
@@ -1629,6 +1630,101 @@ describe("app store", () => {
             store.getState().setActiveTool("room");
             expect(store.getState().activeTool).toBe("select");
             expect(store.getState().addDraftPoint({ x: 0, y: 0 })).toBe(false);
+        });
+
+        describe("distance on a wall before the first corner", () => {
+            /** Top edge of „Raum 1“ (337,5 cm), outer side at y = −15 cm, measured from the left end. */
+            const anchor = { roomId: uuid(10), edgeIndex: 0, face: "outer", fromEnd: "start" } as const;
+
+            function typeOffset(text: string) {
+                const ctx = setup();
+                ctx.store.getState().setActiveTool("room");
+                expect(ctx.store.getState().startWallOffset(anchor, text)).toBe(true);
+                return ctx;
+            }
+
+            it("opens the field without a corner and sets the first corner at the typed distance", () => {
+                const { store } = typeOffset("2");
+                expect(store.getState().roomDraft).toEqual({ points: [], lengthText: "2", hint: null, wallAnchor: anchor });
+                store.getState().setDraftLength("260");
+                expect(store.getState().commitWallOffset()).toBe(true);
+                expect(store.getState().roomDraft).toEqual({
+                    points: [{ x: 260, y: -15 }],
+                    lengthText: "",
+                    hint: null,
+                    wallAnchor: null,
+                });
+            });
+
+            it("measures from the other end after toggling", () => {
+                const { store } = typeOffset("260");
+                store.getState().toggleWallOffsetEnd();
+                expect(store.getState().roomDraft?.wallAnchor?.fromEnd).toBe("end");
+                expect(store.getState().commitWallOffset()).toBe(true);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 77.5, y: -15 }]);
+            });
+
+            it("puts 0 cm on the reference end", () => {
+                const { store } = typeOffset("0");
+                expect(store.getState().commitWallOffset()).toBe(true);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 0, y: -15 }]);
+            });
+
+            it("rejects a distance over the edge's length with a hint and keeps the field", () => {
+                const { store } = typeOffset("340");
+                expect(store.getState().commitWallOffset()).toBe(false);
+                expect(store.getState().roomDraft).toMatchObject({ points: [], lengthText: "340", hint: "wallTooLong" });
+                store.getState().setDraftLength("337,5");
+                expect(store.getState().roomDraft?.hint).toBeNull();
+                expect(store.getState().commitWallOffset()).toBe(true);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 337.5, y: -15 }]);
+            });
+
+            it("closes the field when its text becomes empty", () => {
+                const { store } = typeOffset("2");
+                store.getState().setDraftLength("");
+                expect(store.getState().roomDraft).toBeNull();
+                expect(store.getState().activeTool).toBe("room");
+            });
+
+            it("discards the draft when the wall line is gone", () => {
+                const { store } = typeOffset("2");
+                store.getState().startWallOffset(anchor, "5");
+                store.setState({ roomDraft: { ...store.getState().roomDraft!, wallAnchor: { ...anchor, edgeIndex: 9 } } });
+                expect(store.getState().commitWallOffset()).toBe(false);
+                expect(store.getState().roomDraft).toBeNull();
+            });
+
+            it("needs the tool „Raum“ and no draft yet", () => {
+                const { store } = setup();
+                expect(store.getState().startWallOffset(anchor, "2")).toBe(false);
+                draw(store, [{ x: 0, y: 600 }]);
+                expect(store.getState().startWallOffset(anchor, "2")).toBe(false);
+                expect(store.getState().roomDraft?.points).toHaveLength(1);
+            });
+
+            it("blocks undo, is discarded on a floor change, and Esc goes field → tool", () => {
+                const { store, steps } = typeOffset("260");
+                store.getState().updateRoom("eg", DIELE.id, { name: "Flur" });
+                expect(steps()).toBe(1);
+                expect(store.getState().undo()).toBe(false);
+                expect(store.getState().plan.roomsByFloor.eg[1].name).toBe("Flur");
+                // First Esc (handled by the drawing keys): the field closes, „Raum“ stays.
+                store.getState().cancelDraft();
+                expect(store.getState().roomDraft).toBeNull();
+                expect(store.getState().activeTool).toBe("room");
+                expect(store.getState().undo()).toBe(true);
+                store.getState().startWallOffset(anchor, "2");
+                store.getState().setActiveFloor("og");
+                expect(store.getState().roomDraft).toBeNull();
+                expect(store.getState().activeTool).toBe("select");
+            });
+
+            it("has no corner to add a length to", () => {
+                const { store } = typeOffset("260");
+                expect(store.getState().commitDraftLength({ x: 1, y: 0 })).toBe(false);
+                expect(store.getState().roomDraft?.points).toEqual([]);
+            });
         });
 
         it("selectShape clears selectedRoomId and selectRoom clears selectedShapeId", () => {
