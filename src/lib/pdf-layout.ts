@@ -22,6 +22,8 @@ export interface PdfOptions {
     scale: PdfScaleChoice;
     furniture: boolean;
     roomLabels: boolean;
+    /** „Maße“: room dimensions, with „Möbel“ also those of the shapes. */
+    dimensions: boolean;
     underlay: boolean;
     grid: boolean;
 }
@@ -34,6 +36,7 @@ export function defaultPdfOptions(plan: Pick<Plan, "floors">): PdfOptions {
         scale: 100,
         furniture: true,
         roomLabels: true,
+        dimensions: false,
         underlay: false,
         grid: false,
     };
@@ -73,6 +76,23 @@ export function drawingAreaMm(orientation: PdfOrientation): RectMm {
         width: page.width - 2 * MARGIN_MM,
         height: page.height - 2 * MARGIN_MM - HEADER_MM - FOOTER_MM,
     };
+}
+
+/** Dimensions on paper: font size, line height (text height) and distance from the wall or edge, in mm. */
+export const DIMENSION_FONT_MM = 2;
+export const DIMENSION_HEIGHT_MM = 2.5;
+export const DIMENSION_GAP_MM = 0.8;
+/** How far a dimension outside a wall reaches beyond it on paper, at any scale. */
+export const DIMENSION_MARGIN_MM = DIMENSION_GAP_MM + DIMENSION_HEIGHT_MM;
+
+/**
+ * The size the content has to fit: the drawing area, with „Maße“ less
+ * `DIMENSION_MARGIN_MM` on every side so the dimensions outside the outer
+ * walls stay on the page. The content is still centered in the whole area.
+ */
+export function fitAreaMm(area: SizeMm, options: Pick<PdfOptions, "dimensions">): SizeMm {
+    const margin = options.dimensions ? DIMENSION_MARGIN_MM : 0;
+    return { width: area.width - 2 * margin, height: area.height - 2 * margin };
 }
 
 /** What of a floor may end up on its page. */
@@ -189,7 +209,7 @@ export function pdfIssues(plan: Plan, options: PdfOptions, availableImages: Read
     const selected = plan.floors.filter((f) => options.floorIds.includes(f.id));
     const tooLarge: string[] = [];
     if (options.scale !== "fit") {
-        const area = drawingAreaMm(options.orientation);
+        const area = fitAreaMm(drawingAreaMm(options.orientation), options);
         for (const floor of selected) {
             const bounds = printContentBounds(floorPrintContent(plan, floor.id, availableImages), options);
             if (bounds && !fitsAtScale(bounds, area, options.scale)) tooLarge.push(floor.name);

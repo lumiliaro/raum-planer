@@ -34,6 +34,8 @@ export function FloorCanvas() {
     const vp = useAppStore((s) => s.viewports[floorId]);
     const setViewport = useAppStore((s) => s.setViewport);
     const calibrating = useAppStore((s) => s.calibrationDraft !== null);
+    const showDimensions = useAppStore((s) => s.showDimensions);
+    const toggleDimensions = useAppStore((s) => s.toggleDimensions);
     const addCalibrationPoint = useAppStore((s) => s.addCalibrationPoint);
     const underlay = useAppStore((s) => s.plan.underlayByFloor[floorId]);
     const shapes = useAppStore((s) => s.plan.shapesByFloor[floorId]);
@@ -286,7 +288,14 @@ export function FloorCanvas() {
             )}
             {!calibrating && activeTool === "room" && <RoomDraftField />}
             {underlay && availability === "missing" && !calibrating && <MissingImageHint floorId={floorId} />}
-            <ZoomControls scale={vp?.scale ?? null} onZoomOut={zoomOut} onZoomIn={zoomIn} onFit={fit} />
+            <ZoomControls
+                scale={vp?.scale ?? null}
+                onZoomOut={zoomOut}
+                onZoomIn={zoomIn}
+                onFit={fit}
+                showDimensions={showDimensions}
+                onToggleDimensions={toggleDimensions}
+            />
         </div>
     );
 }

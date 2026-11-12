@@ -8,7 +8,8 @@ import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppS
  * Tool and shape shortcuts: the keys of `TOOLS` (V, R, E, L, U, C, G, T, F) choose a
  * tool, Esc cancels a tool or clears the selection, Delete/Backspace
  * remove the selected shape, room or opening, PageUp/PageDown move it in the drawing order (with
- * Shift to the top/bottom), B shows or hides the active floor's underlay. Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z and Ctrl/⌘+Y redo
+ * Shift to the top/bottom), B shows or hides the active floor's underlay, M shows or hides the
+ * dimensions. Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z and Ctrl/⌘+Y redo
  * everywhere like the header buttons – except in a text field with uncommitted
  * text (`targetOwnsUndo`) and while a shape is dragged or transformed. The
  * other keys are ignored in text fields (not on checkboxes, sliders, color
@@ -56,6 +57,11 @@ export function useShapeShortcuts() {
                 if (!underlay || state.calibrationDraft) return;
                 e.preventDefault();
                 state.setUnderlayVisible(floorId, !underlay.visible);
+                return;
+            }
+            if (e.key.toLowerCase() === "m") {
+                e.preventDefault();
+                state.toggleDimensions();
                 return;
             }
             const tool = toolForKey(e.key);

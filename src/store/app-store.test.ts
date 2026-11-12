@@ -39,6 +39,7 @@ import {
 } from "@/test/plan-fixtures";
 
 const PANEL_KEY = "raumplaner.ui.propertiesPanelOpen";
+const DIMENSIONS_KEY = "raumplaner.ui.showDimensions";
 const CREATED = new Date("2026-11-01T10:00:00.000Z");
 const NOW = new Date("2026-11-11T18:30:00.000Z");
 const now = () => NOW;
@@ -116,6 +117,48 @@ describe("app store", () => {
         const store = createAppStore(throwingStorage());
         expect(() => store.getState().togglePropertiesPanel()).not.toThrow();
         expect(store.getState().propertiesPanelOpen).toBe(false);
+    });
+
+    describe("dimensions", () => {
+        it("are hidden without a stored value, shown with „true“, hidden with an invalid value", () => {
+            expect(createAppStore(storedPlan()).getState().showDimensions).toBe(false);
+            expect(createAppStore(memoryStorage({ [DIMENSIONS_KEY]: "true" })).getState().showDimensions).toBe(true);
+            expect(createAppStore(memoryStorage({ [DIMENSIONS_KEY]: "ja" })).getState().showDimensions).toBe(false);
+            expect(createAppStore(throwingStorage()).getState().showDimensions).toBe(false);
+        });
+
+        it("toggling changes the state and writes the preference", () => {
+            const storage = storedPlan();
+            const store = createAppStore(storage);
+            store.getState().toggleDimensions();
+            expect(store.getState().showDimensions).toBe(true);
+            expect(storage.getItem(DIMENSIONS_KEY)).toBe("true");
+            store.getState().toggleDimensions();
+            expect(store.getState().showDimensions).toBe(false);
+            expect(storage.getItem(DIMENSIONS_KEY)).toBe("false");
+        });
+
+        it("toggling still works when the storage throws", () => {
+            const store = createAppStore(throwingStorage());
+            expect(() => store.getState().toggleDimensions()).not.toThrow();
+            expect(store.getState().showDimensions).toBe(true);
+        });
+
+        it("toggling changes neither the plan nor updatedAt and adds no undo step", () => {
+            const clock = { now: new Date("2026-11-11T09:00:00.000Z") };
+            const store = createAppStore(storedPlan((p) => addShape(p, "eg", rect(1), CREATED)), { now: () => clock.now });
+            store.getState().updateShape("eg", uuid(1), { x: 250 });
+            const plan = store.getState().plan;
+            const steps = store.temporal.getState().pastStates.length;
+            clock.now = new Date("2026-11-11T10:00:00.000Z");
+            store.getState().toggleDimensions();
+            expect(store.getState().plan).toBe(plan);
+            expect(store.temporal.getState().pastStates.length).toBe(steps);
+            // Undo takes back the move of the shape, the dimensions stay on.
+            store.getState().undo();
+            expect(store.getState().plan.shapesByFloor.eg[0].x).toBe(100);
+            expect(store.getState().showDimensions).toBe(true);
+        });
     });
 
     describe("plan", () => {

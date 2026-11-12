@@ -29,6 +29,7 @@ export function ShapesLayer({ floorId, scale }: ShapesLayerProps) {
     const selected = useAppStore(selectSelectedShape);
     const selecting = useAppStore((s) => s.activeTool === "select");
     const altRef = useAltKeyRef();
+    const showDimensions = useAppStore((s) => s.showDimensions);
     const roomDrag = useAppStore((s) => (s.roomDrag?.floorId === floorId ? s.roomDrag : null));
     // The dragged room's corners before the move: they only change on release.
     const draggedRoomPoints = useAppStore((s) =>
@@ -62,6 +63,7 @@ export function ShapesLayer({ floorId, scale }: ShapesLayerProps) {
                     scale={scale}
                     // A locked shape is not draggable: dragging on it pans the view.
                     draggable={selecting && !shape.locked}
+                    showDimensions={showDimensions}
                     altRef={altRef}
                     previewOffsetCm={movingIds.has(shape.id) ? previewOffsetCm : undefined}
                 />

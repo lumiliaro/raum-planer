@@ -30,9 +30,10 @@ const SCALES: { value: PdfScaleChoice; label: string }[] = [
     { value: "fit", label: "Auf Seite einpassen" },
 ];
 
-const CONTENT: { key: "furniture" | "roomLabels" | "underlay" | "grid"; label: string }[] = [
+const CONTENT: { key: "furniture" | "roomLabels" | "dimensions" | "underlay" | "grid"; label: string }[] = [
     { key: "furniture", label: "Möbel" },
     { key: "roomLabels", label: "Raumnamen und Fläche" },
+    { key: "dimensions", label: "Maße" },
     { key: "underlay", label: "Vorlage" },
     { key: "grid", label: "Raster" },
 ];
