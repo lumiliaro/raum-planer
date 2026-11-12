@@ -7,7 +7,7 @@ Wer die App zum ersten Mal öffnet, sieht eine leere Zeichenfläche und viele Ic
 ## What Changes
 
 - Neues **Tutorial**: ein Rundgang in Schritten. Jeder Schritt hebt ein Element der Oberfläche hervor (z. B. das Werkzeug „Raum“) und zeigt daneben eine Sprechblase mit Titel, kurzem Text, „Schritt N von M“ sowie „Überspringen“, „Zurück“ und „Weiter“ (im letzten Schritt „Fertig“).
-- Die Schritte decken ab: Willkommen, Etagen, Vorlage hochladen, Vorlage kalibrieren, Raum zeichnen, Türen/Fenster/Durchgänge, Möbel platzieren, Eigenschaften-Panel, automatisches Speichern, Exportieren/Importieren/PDF, Hilfe.
+- Die Schritte decken ab: Willkommen (mit kurzem Datenschutzhinweis: alles läuft lokal im Browser, kein Konto, nichts geht an einen Server), Etagen, Vorlage hochladen, Vorlage kalibrieren, Raum zeichnen, Türen/Fenster/Durchgänge, Möbel platzieren, Eigenschaften-Panel, automatisches Speichern, Exportieren/Importieren/PDF, Hilfe.
 - Das Tutorial **erklärt nur**: Es wartet nicht auf Aktionen des Nutzers, ändert den Plan nie und blockiert die Oberfläche nicht. Der Nutzer kann nebenbei ausprobieren.
 - **Automatischer Start** nur beim ersten Aufruf: Der Browser hatte noch keinen gespeicherten Plan, und das Tutorial wurde in diesem Browser noch nie beendet oder übersprungen. Bestehende Nutzer mit Plan sehen es nicht ungefragt.
 - **Überspringen** ist in jedem Schritt möglich (Schaltfläche oder `Esc` in der Sprechblase). Danach startet es in diesem Browser nicht mehr von selbst.

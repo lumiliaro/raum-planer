@@ -7,7 +7,7 @@
 
 ## 2. Schritte
 
-- [ ] 2.1 `src/components/tutorial/tutorial-steps.ts` mit `TutorialTarget` und `TUTORIAL_STEPS` (11 Schritte, Titel, Texte in Du-Form, Ziele wie in `specs/app-tutorial`). Texte für „Raum zeichnen“ und „Automatisch gespeichert“ decken die Szenarien der Spec ab.
+- [ ] 2.1 `src/components/tutorial/tutorial-steps.ts` mit `TutorialTarget` und `TUTORIAL_STEPS` (11 Schritte, Titel, Texte in Du-Form, Ziele wie in `specs/app-tutorial`). Texte für „Willkommen“ (inkl. Datenschutzhinweis: läuft im Browser, kein Konto, Daten nur in diesem Browser, nichts geht an einen Server, Verweis auf „Hilfe → Datenschutz“), „Raum zeichnen“ und „Automatisch gespeichert“ decken die Szenarien der Spec ab.
 - [ ] 2.2 `src/components/tutorial/tutorial-steps.test.ts`: Titel in der Reihenfolge der Spec, 11 Schritte, eindeutige IDs, nur „Willkommen“ ohne Ziel, jedes Ziel höchstens einmal, kein leerer Text. `npm test` ist grün.
 
 ## 3. Ziele markieren

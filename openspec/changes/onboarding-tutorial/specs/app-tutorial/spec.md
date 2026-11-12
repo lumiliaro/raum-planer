@@ -7,7 +7,14 @@ Führt neue Nutzer in einem kurzen Rundgang durch die Grundfunktionen der App, d
 ## ADDED Requirements
 
 ### Requirement: Schritte des Tutorials
-Das Tutorial SHALL in dieser Reihenfolge die Schritte „Willkommen“, „Etagen“, „Vorlage hochladen“, „Vorlage kalibrieren“, „Raum zeichnen“, „Türen, Fenster und Durchgänge“, „Möbel platzieren“, „Eigenschaften“, „Automatisch gespeichert“, „Exportieren, Importieren und PDF“ und „Hilfe“ zeigen. Jeder Schritt MUST einen deutschen Titel und einen kurzen deutschen Text haben. Außer „Willkommen“ SHALL jeder Schritt auf ein Element der Oberfläche zeigen: Etagen-Umschalter, Abschnitt „Vorlage“ im Eigenschaften-Panel, „Vorlage kalibrieren“, Werkzeug „Raum“, Werkzeug „Tür“, Werkzeug „Rechteck“, Eigenschaften-Panel, Speicherstatus, „Exportieren“ und „Hilfe“.
+Das Tutorial SHALL in dieser Reihenfolge die Schritte „Willkommen“, „Etagen“, „Vorlage hochladen“, „Vorlage kalibrieren“, „Raum zeichnen“, „Türen, Fenster und Durchgänge“, „Möbel platzieren“, „Eigenschaften“, „Automatisch gespeichert“, „Exportieren, Importieren und PDF“ und „Hilfe“ zeigen. Jeder Schritt MUST einen deutschen Titel und einen kurzen deutschen Text haben; „Willkommen“ MUST zusätzlich den Datenschutzhinweis enthalten. Außer „Willkommen“ SHALL jeder Schritt auf ein Element der Oberfläche zeigen: Etagen-Umschalter, Abschnitt „Vorlage“ im Eigenschaften-Panel, „Vorlage kalibrieren“, Werkzeug „Raum“, Werkzeug „Tür“, Werkzeug „Rechteck“, Eigenschaften-Panel, Speicherstatus, „Exportieren“ und „Hilfe“.
+
+#### Scenario: Inhalt des Schritts „Willkommen“
+- **GIVEN** das Tutorial ist bei „Willkommen“
+- **THEN** steht die Sprechblase mittig über der Zeichenfläche ohne Hervorhebung
+- **AND** der Text sagt kurz, wofür die App da ist und dass man das Tutorial jederzeit überspringen kann
+- **AND** der Text sagt, dass die App komplett im Browser läuft, es kein Konto gibt und alle Daten nur in diesem Browser gespeichert und nicht an einen Server geschickt werden
+- **AND** der Text verweist für Einzelheiten auf „Hilfe → Datenschutz“
 
 #### Scenario: Inhalt des Schritts „Raum zeichnen“
 - **GIVEN** das Tutorial ist bei „Raum zeichnen“

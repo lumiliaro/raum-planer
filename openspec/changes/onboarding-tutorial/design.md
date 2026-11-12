@@ -27,7 +27,7 @@
    - „Gesehen“ wird erst beim Beenden geschrieben, nicht beim Start. Lädt der Nutzer mitten im Tutorial neu und hat noch nichts gespeichert, startet es wieder bei Schritt 1 (Spec-Szenario). Hat er etwas gezeichnet, liegt ein Plan im Speicher (`"restored"`), und es startet nicht.
    - Alternative: Zustand lokal in einer Komponente. Der Neustart kommt aber aus dem `SettingsDialog`, und der Startwert hängt am `loadOutcome` im Store.
 
-2. **Schritte als Daten** in `src/components/tutorial/tutorial-steps.ts`: `TUTORIAL_STEPS: { id, title, text, target: TutorialTarget | null }[]`. `TutorialTarget` ist eine String-Union (`"floors"`, `"underlay"`, `"calibrate"`, `"tool-room"`, `"tool-door"`, `"tool-rect"`, `"properties"`, `"save-status"`, `"export"`, `"help"`). Ein Test prüft Reihenfolge, Anzahl (11), eindeutige IDs und dass nur „Willkommen“ kein Ziel hat.
+2. **Schritte als Daten** in `src/components/tutorial/tutorial-steps.ts`: `TUTORIAL_STEPS: { id, title, text: string[], target: TutorialTarget | null }[]`. `TutorialTarget` ist eine String-Union (`"floors"`, `"underlay"`, `"calibrate"`, `"tool-room"`, `"tool-door"`, `"tool-rect"`, `"properties"`, `"save-status"`, `"export"`, `"help"`). Ein Test prüft Reihenfolge, Anzahl (11), eindeutige IDs und dass nur „Willkommen“ kein Ziel hat.
 
 3. **Ziele über `data-tutorial`-Attribute:** Jedes Zielelement bekommt `data-tutorial="<target>"`. Die Komponente sucht pro Schritt `document.querySelector('[data-tutorial="…"]')`. Werkzeuge bekommen das Attribut über ein optionales Feld `tutorialTarget` in `ToolBar` (`tool-<id>` für `room`, `door-opening`, `rect`), ohne die Registry `TOOLS` zu ändern.
    - Alternative: React-Refs über einen Context registrieren. Mehr Verdrahtung durch viele Komponenten für denselben Zweck; die Attribute sind lokal und im DOM sichtbar.
@@ -43,7 +43,7 @@
 
 5. **Einstellungen:** Neuer letzter Abschnitt „Tutorial“ im `SettingsDialog` mit einer `outline`-Schaltfläche „Tutorial neu starten“. Klick: `onClose()` und `startTutorial()`. Der Abschnitt nutzt `SettingsSection`; „Öffnungen“ verliert dafür `last`. `settingsAreFactory` und „Auf Werkseinstellungen zurücksetzen“ bleiben unberührt.
 
-6. **Texte** stehen in `tutorial-steps.ts` in der Du-Form wie die übrige App, je höchstens drei kurze Sätze. Tastennamen wie in der Hilfe (Enter, Esc, Strg).
+6. **Texte** stehen in `tutorial-steps.ts` in der Du-Form wie die übrige App, je höchstens drei kurze Sätze. Ausnahme „Willkommen“: zwei kurze Absätze (Begrüßung, dann Datenschutzhinweis); dafür bekommt ein Schritt `text: string[]` mit einem Absatz je Eintrag. Der Hinweis deckt sich inhaltlich mit „Hilfe → Datenschutz“, ist aber kürzer. Tastennamen wie in der Hilfe (Enter, Esc, Strg).
 
 **Datenmodell / schemaVersion:** keine Änderung. `tutorialStep` ist Sitzungszustand, `raumplaner.ui.tutorialSeen` eine Browser-Vorliebe wie `showDimensions`. Beides gehört nicht zum Plan, zum Export oder zur History.
 
