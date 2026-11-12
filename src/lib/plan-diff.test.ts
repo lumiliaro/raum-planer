@@ -209,9 +209,24 @@ describe("rooms", () => {
         expect(resolveHistoryFocus(before, after)).toEqual({ floorId: "eg", shapeId: null, roomId: null, openingId: null });
     });
 
-    it("a changed shape wins over a changed room in the same step", () => {
+    it("undoing a move of a room with exactly one shape inside focuses the room, not the shape (Verschieben mit Möbel rückgängig)", () => {
+        const after = addShape(withRooms(), "eg", rect(5, { x: 420, y: 80, locked: true }), T0);
+        const before = moveRoom(after, "eg", DIELE.id, -30, 0, T1);
+        expect(before.shapesByFloor.eg.at(-1)).toMatchObject({ x: 390, y: 80 });
+        expect(resolveHistoryFocus(before, after)).toEqual({ floorId: "eg", shapeId: null, roomId: DIELE.id, openingId: null });
+        expect(resolveHistoryFocus(after, before)).toEqual({ floorId: "eg", shapeId: null, roomId: DIELE.id, openingId: null });
+    });
+
+    it("undoing a move of a room with several shapes inside focuses the room", () => {
+        const after = withRooms();
+        const before = moveRoom(after, "eg", room(10).id, 10, 0, T1);
+        expect(before.shapesByFloor.eg.map((s) => s.x)).toEqual([110, 110, 110]);
+        expect(resolveHistoryFocus(before, after)).toEqual({ floorId: "eg", shapeId: null, roomId: room(10).id, openingId: null });
+    });
+
+    it("a change of only one shape still focuses the shape", () => {
         const before = withRooms();
-        const after = updateShape(updateRoom(before, "eg", DIELE.id, { name: "Flur" }, T1), "eg", uuid(1), { x: 5 }, T1);
+        const after = updateShape(before, "eg", uuid(1), { x: 5 }, T1);
         expect(resolveHistoryFocus(before, after)).toEqual({ floorId: "eg", shapeId: uuid(1), roomId: null, openingId: null });
     });
 });

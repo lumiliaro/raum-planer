@@ -648,7 +648,7 @@ describe("rooms", () => {
     });
 
     describe("moveRoom", () => {
-        it("moves all corners and leaves the shapes alone", () => {
+        it("moves all corners and leaves shapes outside the room alone", () => {
             const before = addShape(withRooms(), "eg", A, CREATED);
             const after = moveRoom(before, "eg", DIELE.id, 25, 0, NOW);
             expect(after.roomsByFloor.eg[1].pointsCm).toEqual(rectPoints(374, 0, 150, 200));
@@ -661,6 +661,51 @@ describe("rooms", () => {
             const plan = withRooms();
             expect(moveRoom(plan, "eg", DIELE.id, 0, 0, NOW)).toBe(plan);
             expect(moveRoom(plan, "eg", uuid(99), 5, 0, NOW)).toBe(plan);
+        });
+
+        describe("takes the shapes inside along", () => {
+            const LIVING = room(20, "Wohnen", rectPoints(0, 0, 400, 500));
+            const SOFA = rect(1, { x: 200, y: 100, rotationDeg: 90, mirrored: true, label: "Sofa" });
+            const TABLE = rect(2, { x: 600, y: 100 });
+            const TUB = rect(3, { x: 120, y: 80, locked: true });
+            const OTHER_FLOOR = rect(4, { x: 200, y: 100 });
+            const living = (eg: Shape[], og: Shape[] = []) => addRoom(planWith(eg, og), "eg", LIVING, CREATED);
+
+            it("moves a shape inside by the same offset and keeps everything else (Möbel im Raum wandern mit)", () => {
+                const after = moveRoom(living([SOFA]), "eg", LIVING.id, 50, 20, NOW);
+                expect(after.shapesByFloor.eg).toEqual([{ ...SOFA, x: 250, y: 120 }]);
+                expect(after.roomsByFloor.eg[0].pointsCm).toEqual(rectPoints(50, 20, 400, 500));
+            });
+
+            it("leaves a shape outside where it is (Möbel außerhalb bleiben liegen)", () => {
+                const before = living([SOFA, TABLE]);
+                const after = moveRoom(before, "eg", LIVING.id, 50, 0, NOW);
+                expect(after.shapesByFloor.eg[1]).toBe(before.shapesByFloor.eg[1]);
+                expect(after.shapesByFloor.eg[1]).toMatchObject({ x: 600, y: 100 });
+            });
+
+            it("moves a locked shape and keeps it locked (Gesperrte Form wandert mit)", () => {
+                const after = moveRoom(living([TUB]), "eg", LIVING.id, -30, 0, NOW);
+                expect(after.shapesByFloor.eg[0]).toEqual({ ...TUB, x: 90, y: 80 });
+            });
+
+            it("keeps the drawing order and the shapes of other floors", () => {
+                const before = living([TABLE, SOFA, TUB], [OTHER_FLOOR]);
+                const after = moveRoom(before, "eg", LIVING.id, 10, 10, NOW);
+                expect(ids(after.shapesByFloor.eg)).toEqual([TABLE.id, SOFA.id, TUB.id]);
+                expect(after.shapesByFloor.og).toBe(before.shapesByFloor.og);
+            });
+
+            it("rounds the new position to 0.1 cm", () => {
+                const after = moveRoom(living([rect(5, { x: 200.1, y: 100 })]), "eg", LIVING.id, 0.05, 0, NOW);
+                expect(after.shapesByFloor.eg[0]).toMatchObject({ x: 200.2, y: 100 });
+            });
+
+            it("changes nothing when the move is rejected", () => {
+                const plan = living([SOFA]);
+                expect(moveRoom(plan, "eg", LIVING.id, 0, 0, NOW)).toBe(plan);
+                expect(moveRoom(plan, "eg", uuid(99), 5, 0, NOW)).toBe(plan);
+            });
         });
     });
 

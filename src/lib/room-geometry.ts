@@ -121,6 +121,15 @@ export function containsPoint(points: readonly PointCm[], p: PointCm): boolean {
     return inside;
 }
 
+/**
+ * Ids of the shapes whose position (center `x`/`y`) lies inside the outline,
+ * in the order of `shapes`. Moving a room takes these shapes along; the outline
+ * of a shape does not matter, only its center.
+ */
+export function shapeIdsInRoom(points: readonly PointCm[], shapes: readonly { id: string; x: number; y: number }[]): string[] {
+    return shapes.filter((s) => containsPoint(points, { x: s.x, y: s.y })).map((s) => s.id);
+}
+
 /** Area centroid of a simple polygon; the vertex average for a degenerate one. */
 function centroid(points: readonly PointCm[]): PointCm {
     let area2 = 0;
