@@ -70,7 +70,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
         id: "openings",
         title: "Türen, Fenster und Durchgänge",
         text: [
-            "Mit „Tür“, „Fenster“ und „Durchgang“ klickst du auf eine Raumwand, um dort eine Öffnung zu setzen. Dafür braucht die Etage mindestens einen Raum.",
+            "Mit „Tür“, „Fenster“ und „Durchgang“ klickst du auf eine Raumwand, um dort eine Öffnung zu setzen. Dafür braucht die Etage mindestens einen Raum. Ein ausgewähltes Fenster oder einen Durchgang machst du an den Griffen an seinen Enden breiter oder schmaler.",
         ],
         target: "tool-door",
     },

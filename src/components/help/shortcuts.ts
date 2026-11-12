@@ -62,7 +62,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
         entries: [
             { keys: ["Alt"], description: "Schritte von 1 cm statt 5 cm" },
             { keys: ["Strg"], description: "Ohne Einrasten an Formen und ohne Haften an Wänden" },
-            { keys: ["Umschalt"], description: "Tür, Fenster oder Durchgang ohne Einrasten an Rastpunkten" },
+            { keys: ["Umschalt"], description: "Tür, Fenster oder Durchgang ohne Einrasten an Rastpunkten, auch beim Ziehen der Breite" },
         ],
     },
     {

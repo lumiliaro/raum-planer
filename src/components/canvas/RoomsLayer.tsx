@@ -108,16 +108,16 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
             }),
         [rooms, drag],
     );
-    // Gaps follow a room or an opening being dragged.
+    // Gaps follow a room or an opening being dragged or resized.
     const gaps = useMemo(
         () =>
             rooms.flatMap((room) => {
                 const points = drag?.id === room.id ? translatePoints(room.pointsCm, drag.dx, drag.dy) : room.pointsCm;
                 return room.openings.map((opening) => {
-                    const offsetCm = openingDrag?.id === opening.id ? openingDrag.offsetCm : opening.offsetCm;
+                    const placed = openingDrag?.id === opening.id ? { ...opening, ...openingDrag } : opening;
                     const frame = edgeFrame(points, opening.edgeIndex);
                     const thicknessCm = room.wallThicknessCm[opening.edgeIndex];
-                    return { id: opening.id, points: flat(openingGap(frame, { ...opening, offsetCm }, thicknessCm)) };
+                    return { id: opening.id, points: flat(openingGap(frame, placed, thicknessCm)) };
                 });
             }),
         [rooms, drag, openingDrag],
