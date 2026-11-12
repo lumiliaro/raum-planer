@@ -158,12 +158,17 @@ export function FloorCanvas() {
                 addCalibrationPoint(px);
             }
         } else if (activeTool === "room") {
-            // Next corner: a corner nearby wins, else the edge in the snapped direction (Shift: free).
+            // Next corner: a corner nearby wins, else the edge in the snapped direction (Shift: free),
+            // then guides through other corners („Einrasten“ on, Ctrl not held). Same as the preview.
             if (!pt || !vp) return;
             const { roomDraft } = useAppStore.getState();
             const corners = rooms.flatMap((room) => room.pointsCm);
             const radiusCm = CORNER_SNAP_RADIUS_PX / vp.scale;
-            const next = resolveDraftPointer(roomDraft?.points ?? [], pt, corners, radiusCm, e.evt.shiftKey);
+            const next = resolveDraftPointer(roomDraft?.points ?? [], pt, corners, {
+                radiusCm,
+                free: e.evt.shiftKey,
+                guides: shapeSnapping && !e.evt.ctrlKey,
+            });
             if (next.closes) closeDraft();
             else if (next.point) addDraftPoint(next.point);
         } else if (isOpeningTool(activeTool)) {

@@ -72,6 +72,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
             { keys: ["Enter"], description: "Eckpunkt setzen, bei leerem Feld Umriss schließen" },
             { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Eckpunkt löschen" },
             { keys: ["Umschalt"], description: "Kante ohne Einrasten auf 0°/90°/180°/270°" },
+            { keys: ["Strg"], description: "Ohne Hilfslinien" },
             { keys: ["Esc"], description: "Umriss verwerfen" },
         ],
     },
