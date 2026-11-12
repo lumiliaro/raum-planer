@@ -25,6 +25,8 @@ interface ShapeNodeProps {
     scale: number;
     draggable: boolean;
     altRef: RefObject<boolean>;
+    /** Preview offset in cm while the shape's room is dragged; drawn at `x + dx`, `y + dy`. */
+    previewOffsetCm?: PointCm;
 }
 
 interface DragStart {
@@ -38,9 +40,11 @@ interface DragStart {
  * One shape: a group at the shape's center (cm) with its rotation, a
  * closed line from `getOutlineCm` and the label, if any. A door is drawn from
  * the same points as a filled swing area, a solid leaf and a dashed swing. Dragging moves it relative to its start in
- * 5-cm steps (1 cm with Alt); the plan changes only on release.
+ * 5-cm steps (1 cm with Alt); the plan changes only on release. While the
+ * room the shape lies in is dragged, `previewOffsetCm` draws it moved along;
+ * on release the plan carries the move, so the shape does not jump.
  */
-export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef }: ShapeNodeProps) {
+export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef, previewOffsetCm }: ShapeNodeProps) {
     const selectShape = useAppStore((s) => s.selectShape);
     const updateShape = useAppStore((s) => s.updateShape);
     const settings = useAppStore(selectSettings);
@@ -126,8 +130,8 @@ export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef 
             ref={groupRef}
             id={shape.id}
             name={SHAPE_NODE_NAME}
-            x={shape.x}
-            y={shape.y}
+            x={shape.x + (previewOffsetCm?.x ?? 0)}
+            y={shape.y + (previewOffsetCm?.y ?? 0)}
             rotation={shape.rotationDeg}
             draggable={draggable}
             dragBoundFunc={dragBound}

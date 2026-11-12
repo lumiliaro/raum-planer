@@ -9,6 +9,7 @@ import {
     roomAreaM2,
     segmentsIntersect,
     setEdgeLength,
+    shapeIdsInRoom,
     translatePoints,
     wallBandOutline,
 } from "@/lib/room-geometry";
@@ -114,6 +115,29 @@ describe("containsPoint", () => {
         expect(containsPoint(L_ROOM, { x: 100, y: 200 })).toBe(true);
         expect(containsPoint(L_ROOM, { x: 350, y: 200 })).toBe(false);
         expect(containsPoint(L_ROOM, { x: -1, y: 10 })).toBe(false);
+    });
+});
+
+describe("shapeIdsInRoom", () => {
+    const WOHNEN_400 = pts([0, 0], [400, 0], [400, 500], [0, 500]);
+    const at = (id: string, x: number, y: number) => ({ id, x, y });
+
+    it("takes a shape whose center lies inside, not one outside", () => {
+        expect(shapeIdsInRoom(WOHNEN_400, [at("sofa", 200, 100), at("tisch", 600, 100)])).toEqual(["sofa"]);
+    });
+
+    it("decides by the center only (Mittelpunkt entscheidet)", () => {
+        // Schrank 100 cm breit at 380 cm reaches 30 cm beyond the edge; Regal at 430 cm reaches 20 cm in.
+        expect(shapeIdsInRoom(WOHNEN_400, [at("schrank", 380, 200), at("regal", 430, 200)])).toEqual(["schrank"]);
+    });
+
+    it("leaves out a shape in the cut-out corner of an L-shaped room", () => {
+        expect(shapeIdsInRoom(L_ROOM, [at("in", 100, 200), at("eck", 350, 200)])).toEqual(["in"]);
+    });
+
+    it("keeps the order of the shapes and gives an empty list for no shapes", () => {
+        expect(shapeIdsInRoom(WOHNEN_400, [at("c", 300, 300), at("a", 10, 10), at("b", 200, 400)])).toEqual(["c", "a", "b"]);
+        expect(shapeIdsInRoom(WOHNEN_400, [])).toEqual([]);
     });
 });
 

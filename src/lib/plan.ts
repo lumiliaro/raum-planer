@@ -8,7 +8,7 @@
 import { CalibrationSchema, type Calibration } from "@/lib/calibration-schema";
 import { reanchorOpenings } from "@/lib/opening-reanchor";
 import { FACTORY_SETTINGS, PlanSettingsSchema, sameSettings, type SettingsPatch } from "@/lib/plan-settings";
-import { translatePoints } from "@/lib/room-geometry";
+import { roundCm, shapeIdsInRoom, translatePoints } from "@/lib/room-geometry";
 import {
     FloorSchema,
     MAX_FLOORS,
@@ -277,12 +277,27 @@ export function updateRoom(plan: Plan, floorId: FloorId, id: string, patch: Room
     return withRooms(plan, floorId, rooms.with(index, next), now);
 }
 
-/** Moves all corners of the room by `dx`/`dy` cm; shapes stay where they are. Rejects a move by 0. */
+/**
+ * Moves all corners of the room by `dx`/`dy` cm and, in the same plan update,
+ * every shape of the floor whose center lay inside the room before the move
+ * (`shapeIdsInRoom`), locked shapes included. Positions are rounded to 0.1 cm;
+ * order and all other fields of the shapes stay. Rejects a move by 0.
+ */
 export function moveRoom(plan: Plan, floorId: FloorId, id: string, dx: number, dy: number, now: Date): Plan {
     if (dx === 0 && dy === 0) return plan;
     const room = plan.roomsByFloor[floorId]?.find((r) => r.id === id);
     if (!room) return plan;
-    return updateRoom(plan, floorId, id, { pointsCm: translatePoints(room.pointsCm, dx, dy) }, now);
+    const shapes = plan.shapesByFloor[floorId] ?? [];
+    const inside = new Set(shapeIdsInRoom(room.pointsCm, shapes));
+    const moved = updateRoom(plan, floorId, id, { pointsCm: translatePoints(room.pointsCm, dx, dy) }, now);
+    if (moved === plan || inside.size === 0) return moved;
+    return {
+        ...moved,
+        shapesByFloor: {
+            ...moved.shapesByFloor,
+            [floorId]: shapes.map((s) => (inside.has(s.id) ? { ...s, x: roundCm(s.x + dx), y: roundCm(s.y + dy) } : s)),
+        },
+    };
 }
 
 export function removeRoom(plan: Plan, floorId: FloorId, id: string, now: Date): Plan {

@@ -1,5 +1,5 @@
 import type Konva from "konva";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Group, Layer, Line } from "react-konva";
 import { OpeningsLayer, type OpeningDrag, type SnapMark } from "@/components/canvas/OpeningsLayer";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
@@ -10,7 +10,7 @@ import { roomAreaFill } from "@/lib/room-colors";
 import { labelPointCm, translatePoints, wallBandOutline } from "@/lib/room-geometry";
 import { WALL_SNAP_CAPTURE_PX, WALL_SNAP_RELEASE_PX, snapRoomDrag, type WallStick } from "@/lib/room-snap";
 import { snapDelta, snapStepCm } from "@/lib/snap";
-import { selectSelectedRoom, selectSettings, useAppStore } from "@/store/app-store";
+import { selectSelectedRoom, selectSettings, useAppStore, type RoomDrag } from "@/store/app-store";
 import { ROOM_LABEL_COLOR, SELECTION_COLOR } from "@/components/canvas/canvas-style";
 
 /** Konva name of every room's area group; clicks find their room via `findAncestor(".room")`. */
@@ -21,19 +21,8 @@ const MOVE_CURSOR = "var(--cursor-move-shape)";
 
 const flat = (points: readonly PointCm[], dx = 0, dy = 0) => points.flatMap((p) => [p.x + dx, p.y + dy]);
 
-/** An edge of another room that the dragged room sticks to. */
-interface StuckEdge {
-    roomId: string;
-    edgeIndex: number;
-}
-
-/** A room being dragged, its snapped offset in cm and the walls it sticks to. */
-interface RoomDrag {
-    id: string;
-    dx: number;
-    dy: number;
-    stuckEdges: StuckEdge[];
-}
+/** What `RoomArea` reports while dragging; the floor is added by `RoomsLayer`. */
+type RoomDragReport = Omit<RoomDrag, "floorId">;
 
 interface RoomsLayerProps {
     floorId: FloorId;
@@ -66,6 +55,8 @@ interface RoomsLayerProps {
  * its corners flush and tears off beyond 24 screen px across the wall; the walls
  * it sticks to are highlighted. Ctrl switches sticking off. The plan changes on
  * release. Dragging a locked room pans the view like dragging an unselected one.
+ * The drag lives in the store (`roomDrag`, only read for this floor), so the
+ * shapes layer can preview the shapes moving with the room.
  */
 export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId]);
@@ -77,7 +68,13 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
     const shiftRef = useShiftKeyRef();
     const ctrlRef = useCtrlKeyRef();
     const selectedOpeningId = useAppStore((s) => s.selectedOpeningId);
-    const [drag, setDrag] = useState<RoomDrag | null>(null);
+    const storedDrag = useAppStore((s) => s.roomDrag);
+    const setRoomDrag = useAppStore((s) => s.setRoomDrag);
+    const drag = storedDrag?.floorId === floorId ? storedDrag : null;
+    const setDrag = useCallback(
+        (report: RoomDragReport | null) => setRoomDrag(report && { ...report, floorId }),
+        [setRoomDrag, floorId],
+    );
     const [openingDrag, setOpeningDrag] = useState<OpeningDrag | null>(null);
 
     const offsetOf = (id: string) => (drag?.id === id ? drag : { dx: 0, dy: 0 });
@@ -207,7 +204,7 @@ interface RoomAreaProps {
     /** Ctrl held: no sticking to walls. */
     ctrlRef: RefObject<boolean>;
     /** Reports the snapped offset and stuck walls while dragging, `null` when the drag ends. */
-    onDrag: (drag: RoomDrag | null) => void;
+    onDrag: (drag: RoomDragReport | null) => void;
 }
 
 interface DragStart {

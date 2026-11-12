@@ -110,8 +110,10 @@ export interface KeepFocus {
  * Where to look after undo/redo turned `before` into `after`: the only floor
  * whose shapes, rooms, underlay, name or position differ, if it exists in
  * `after` (else `after.activeFloorId`, else the first floor of `after`), and
- * the only shape there that was added or changed, else the only such room –
- * or, if nothing but that room's openings changed, the only such opening. A removed
+ * the only room there that was added or changed – even if shapes changed with
+ * it, as moving a room takes its shapes along – or, if nothing but that room's
+ * openings changed, the only such opening; without such a room the only shape
+ * there that was added or changed. A removed
  * shape, room or opening does not count. The result is always a floor of `after`.
  * If no floor changed but the settings did, the result is `{ keep: true }`.
  */
@@ -130,10 +132,11 @@ export function resolveHistoryFocus(before: Plan, after: Plan): HistoryFocus | K
     }
 
     const floorId = changed[0];
-    const shapes = touchedIds(before.shapesByFloor[floorId], after.shapesByFloor[floorId]);
-    const shapeId = shapes.length === 1 ? shapes[0] : null;
     const rooms = touchedIds(before.roomsByFloor[floorId], after.roomsByFloor[floorId]);
-    if (shapeId !== null || rooms.length !== 1) return { floorId, shapeId, roomId: null, openingId: null };
+    if (rooms.length !== 1) {
+        const shapes = touchedIds(before.shapesByFloor[floorId], after.shapesByFloor[floorId]);
+        return { floorId, shapeId: shapes.length === 1 ? shapes[0] : null, roomId: null, openingId: null };
+    }
     const roomAfter = after.roomsByFloor[floorId].find((r) => r.id === rooms[0])!;
     const roomBefore = before.roomsByFloor[floorId]?.find((r) => r.id === rooms[0]);
     if (!roomBefore || !onlyOpeningsChanged(roomBefore, roomAfter)) {

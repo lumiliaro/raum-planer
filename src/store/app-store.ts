@@ -101,6 +101,25 @@ export type SaveStatus = "saved" | "failed" | "suspended";
 export type ImageStoreStatus = "ok" | "failed";
 
 
+/** A wall of another room that the dragged room sticks to. */
+export interface StuckEdge {
+    roomId: string;
+    edgeIndex: number;
+}
+
+/**
+ * A room being dragged on the canvas: its offset in cm after grid and wall
+ * sticking, and the walls it sticks to. Shapes inside the room show the same
+ * offset as a preview.
+ */
+export interface RoomDrag {
+    floorId: FloorId;
+    id: string;
+    dx: number;
+    dy: number;
+    stuckEdges: StuckEdge[];
+}
+
 export interface AppState {
     /** The user's plan. Replaced as a whole on every change (autosave and later undo track it). */
     plan: Plan;
@@ -128,6 +147,8 @@ export interface AppState {
     roomDraft: RoomDraft | null;
     /** Edge (0-based) of the selected room whose length field has the focus; highlighted on the canvas. */
     highlightedEdge: number | null;
+    /** Session-only, not part of the history: the room being dragged, `null` = none. */
+    roomDrag: RoomDrag | null;
     imageStoreStatus: ImageStoreStatus;
     /** Written by the canvas (`useUnderlayImage`), read by tool bar, status bar and panel. */
     imageAvailability: Partial<Record<ImageId, ImageAvailability>>;
@@ -155,6 +176,8 @@ export interface AppState {
     /** Selects an opening and deselects shape and room; `null` clears the whole selection. */
     selectOpening: (id: string | null) => void;
     setHighlightedEdge: (index: number | null) => void;
+    /** Written by the canvas while a room is dragged; no history step. */
+    setRoomDrag: (drag: RoomDrag | null) => void;
     /**
      * Inserts a new shape centered at `pointCm` on top of the active floor,
      * selects it and switches back to "select". Not in calibration mode.
@@ -348,6 +371,7 @@ export function createAppStore(
                     selectedOpeningId: null,
                     roomDraft: null,
                     highlightedEdge: null,
+                    roomDrag: null,
                 } as const;
 
                 const updateRoomDraft = (fn: (draft: RoomDraft) => RoomDraft) => {
@@ -382,6 +406,7 @@ export function createAppStore(
                     selectedOpeningId: null,
                     roomDraft: null,
                     highlightedEdge: null,
+                    roomDrag: null,
                     imageStoreStatus: "ok",
                     imageAvailability: {},
 
@@ -425,6 +450,7 @@ export function createAppStore(
                     selectOpening: (id) =>
                         set({ selectedOpeningId: id, selectedShapeId: null, selectedRoomId: null, highlightedEdge: null }),
                     setHighlightedEdge: (index) => set({ highlightedEdge: index }),
+                    setRoomDrag: (drag) => set({ roomDrag: drag }),
                     insertShape: (kind, pointCm) => {
                         if (!isToolEnabled(get(), kind)) return false;
                         const floorId = get().plan.activeFloorId;
