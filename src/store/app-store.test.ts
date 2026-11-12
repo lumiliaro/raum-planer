@@ -5,7 +5,7 @@ import { addOpening, addRoom, addShape, createEmptyPlan, setActiveFloor, setCali
 import planV1Text from "@/lib/__fixtures__/plan-v1.json?raw";
 import planV2Text from "@/lib/__fixtures__/plan-v2.json?raw";
 import { PLAN_BACKUP_KEY, PLAN_PRE_MIGRATION_KEY, PLAN_STORAGE_KEY } from "@/lib/plan-storage";
-import { toggleFullEdge } from "@/lib/opening-fields";
+import { isFullEdge, toggleFullEdge } from "@/lib/opening-fields";
 import { edgeFrame } from "@/lib/opening-geometry";
 import { EDGE_HIT_TOLERANCE_PX } from "@/lib/opening-placement";
 import { SNAP_POINT_TOLERANCE_PX } from "@/lib/opening-snap";
@@ -2101,6 +2101,39 @@ describe("app store", () => {
                 expect(ctx.store.getState().selectedOpeningId).toBe(ctx.opening.id);
                 expect(ctx.store.getState().redo()).toBe(true);
                 expect(ctx.openings().at(-1)).toEqual(ctx.opening);
+            });
+        });
+
+        describe("resizing at the handles", () => {
+            it("one patch with width and offset is one step; undo restores the width and the selection (Ein Rückgängig-Schritt)", () => {
+                const { store, steps, openings } = setup();
+                store.getState().selectOpening(WINDOW.id);
+                expect(store.getState().updateOpening("eg", WINDOW.id, { offsetCm: 100, widthCm: 155 })).toBe(true);
+                expect(openings()[0]).toMatchObject({ offsetCm: 100, widthCm: 155 });
+                expect(steps()).toBe(1);
+                store.getState().selectRoom(WOHNEN.id);
+                expect(store.getState().undo()).toBe(true);
+                expect(openings()[0]).toEqual(WINDOW);
+                expect(store.getState().selectedOpeningId).toBe(WINDOW.id);
+            });
+
+            it("forgets the remembered sizes; dragged to both corners „Ganze Kante“ is checked (Ganze Kante gezogen)", () => {
+                const { store, openings } = setup();
+                const remembered = { offsetCm: 100, widthCm: 120 };
+                expect(store.getState().updateOpening("eg", WINDOW.id, { offsetCm: 0, widthCm: 500, beforeFullEdge: remembered })).toBe(true);
+                // Drag the left handle to the left corner (unchanged), then the right one to the right corner.
+                expect(store.getState().updateOpening("eg", WINDOW.id, { offsetCm: 0, widthCm: 300 })).toBe(true);
+                expect(openings()[0].beforeFullEdge).toBeNull();
+                expect(store.getState().updateOpening("eg", WINDOW.id, { offsetCm: 0, widthCm: 500 })).toBe(true);
+                expect(openings()[0]).toMatchObject({ offsetCm: 0, widthCm: 500, beforeFullEdge: null });
+                expect(isFullEdge(edgeFrame(WOHNEN.pointsCm, WINDOW.edgeIndex), openings()[0])).toBe(true);
+            });
+
+            it("works in a locked room (Gesperrter Raum)", () => {
+                const { store, openings } = setup();
+                expect(store.getState().updateRoom("eg", WOHNEN.id, { locked: true })).toBe(true);
+                expect(store.getState().updateOpening("eg", WINDOW.id, { offsetCm: 100, widthCm: 155 })).toBe(true);
+                expect(openings()[0]).toMatchObject({ offsetCm: 100, widthCm: 155 });
             });
         });
 
