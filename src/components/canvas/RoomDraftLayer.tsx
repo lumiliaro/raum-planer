@@ -14,6 +14,7 @@ import {
     pointAtDistance,
     resolveDraftPointer,
     snapDirection,
+    type DraftGuide,
     type Direction,
 } from "@/lib/room-drawing";
 import { distanceCm } from "@/lib/room-geometry";
@@ -31,9 +32,11 @@ interface DraftPointerState {
     screen: Point | null;
     /** Shift held: free angle instead of 0°/90°/180°/270°. */
     shift: boolean;
+    /** Ctrl held: no snapping to guides. */
+    ctrl: boolean;
 }
 
-const useDraftPointer = create<DraftPointerState>()(() => ({ cm: null, screen: null, shift: false }));
+const useDraftPointer = create<DraftPointerState>()(() => ({ cm: null, screen: null, shift: false, ctrl: false }));
 
 const EDGE_COLOR = "#18181B";
 const INVALID_COLOR = "#DC2626";
@@ -41,6 +44,8 @@ const INVALID_COLOR = "#DC2626";
 const SNAP_COLOR = "#2563EB";
 /** Dash of the edge towards the pointer in screen px. */
 const RUBBER_DASH = [6, 4];
+/** Dash of a guide in screen px. */
+const GUIDE_DASH = [4, 4];
 /** Radius of the ring at the start point or a snapped corner, in screen px. */
 const RING_RADIUS_PX = 6;
 /** The edge length is shown this far above the middle of the edge, in screen px. */
@@ -56,6 +61,8 @@ interface DraftPreview {
     /** Snapped to the start point or a room corner (ring). */
     snapped: boolean;
     closes: boolean;
+    /** Guides the end snapped to (none for a typed length). */
+    guides: DraftGuide[];
 }
 
 /** Direction of the next edge from the last corner towards the pointer, or `null`. */
@@ -69,6 +76,7 @@ function previewFor(
     pointer: DraftPointerState,
     roomCorners: readonly PointCm[],
     scale: number,
+    snapping: boolean,
 ): DraftPreview | null {
     if (!pointer.cm) return null;
     const points = draft?.points ?? [];
@@ -77,12 +85,16 @@ function previewFor(
         const direction = currentDirection(draft, pointer);
         if (!direction) return null;
         const end = pointAtDistance(points[points.length - 1], direction, typed);
-        return { end, valid: canAppendPoint(points, end), snapped: false, closes: false };
+        return { end, valid: canAppendPoint(points, end), snapped: false, closes: false, guides: [] };
     }
-    const resolved = resolveDraftPointer(points, pointer.cm, roomCorners, CORNER_SNAP_RADIUS_PX / scale, pointer.shift);
+    const resolved = resolveDraftPointer(points, pointer.cm, roomCorners, {
+        radiusCm: CORNER_SNAP_RADIUS_PX / scale,
+        free: pointer.shift,
+        guides: snapping && !pointer.ctrl,
+    });
     if (!resolved.point) return null;
     const valid = resolved.closes ? canClose(points) : canAppendPoint(points, resolved.point);
-    return { end: resolved.point, valid, snapped: resolved.snapped, closes: resolved.closes };
+    return { end: resolved.point, valid, snapped: resolved.snapped, closes: resolved.closes, guides: resolved.guides };
 }
 
 interface RoomDraftLayerProps {
@@ -94,7 +106,8 @@ interface RoomDraftLayerProps {
 /**
  * The room being drawn with „Raum“, above everything: the edges set so far,
  * the dashed edge towards the pointer with its length (red where the corner
- * is not allowed), a ring at the start point and at a snapped corner. Also
+ * is not allowed), a ring at the start point and at a snapped corner, and
+ * dashed guides from the corner the next corner is aligned with. Also
  * handles the keys while drawing: digits, comma and point type a length,
  * Enter sets it (or closes the outline with an empty field), Backspace
  * deletes a character or the last corner, Esc discards the outline.
@@ -103,12 +116,13 @@ interface RoomDraftLayerProps {
 export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
     const draft = useAppStore((s) => s.roomDraft);
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId]);
+    const snapping = useAppStore((s) => s.shapeSnapping);
     const pointer = useDraftPointer();
     const layerRef = useRef<Konva.Layer>(null);
 
     const roomCorners = useMemo(() => rooms.flatMap((room) => room.pointsCm), [rooms]);
 
-    // Track the pointer on the stage; Shift also changes the preview without moving the mouse.
+    // Track the pointer on the stage; Shift and Ctrl also change the preview without moving the mouse.
     useEffect(() => {
         const stage = layerRef.current?.getStage();
         if (!stage) return;
@@ -117,27 +131,29 @@ export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
                 cm: stage.getRelativePointerPosition(),
                 screen: stage.getPointerPosition(),
                 shift: e.evt.shiftKey,
+                ctrl: e.evt.ctrlKey,
             });
         };
         const onLeave = () => useDraftPointer.setState({ cm: null, screen: null });
-        const onShift = (e: KeyboardEvent) => {
+        const onModifier = (e: KeyboardEvent) => {
             if (e.key === "Shift") useDraftPointer.setState({ shift: e.type === "keydown" });
+            else if (e.key === "Control") useDraftPointer.setState({ ctrl: e.type === "keydown" });
         };
         stage.on("mousemove.roomDraft", onMove);
         stage.on("mouseleave.roomDraft", onLeave);
-        window.addEventListener("keydown", onShift);
-        window.addEventListener("keyup", onShift);
+        window.addEventListener("keydown", onModifier);
+        window.addEventListener("keyup", onModifier);
         return () => {
             stage.off(".roomDraft");
-            window.removeEventListener("keydown", onShift);
-            window.removeEventListener("keyup", onShift);
-            useDraftPointer.setState({ cm: null, screen: null, shift: false });
+            window.removeEventListener("keydown", onModifier);
+            window.removeEventListener("keyup", onModifier);
+            useDraftPointer.setState({ cm: null, screen: null, shift: false, ctrl: false });
         };
     }, []);
 
     useRoomDraftKeys();
 
-    const preview = previewFor(draft, pointer, roomCorners, scale);
+    const preview = previewFor(draft, pointer, roomCorners, scale, snapping);
     const points = draft?.points ?? [];
     const last = points.at(-1);
     const px = 1 / scale;
@@ -159,6 +175,16 @@ export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
                     lineJoin="round"
                 />
             )}
+            {preview?.guides.map((guide) => (
+                <Line
+                    key={guide.axis}
+                    points={[guide.from.x, guide.from.y, preview.end.x, preview.end.y]}
+                    stroke={SNAP_COLOR}
+                    strokeWidth={1}
+                    strokeScaleEnabled={false}
+                    dash={GUIDE_DASH}
+                />
+            ))}
             {rubber && (
                 <Line points={rubber} stroke={rubberColor} strokeWidth={2} strokeScaleEnabled={false} dash={RUBBER_DASH} />
             )}

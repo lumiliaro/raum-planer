@@ -53,7 +53,11 @@ export function ZoomControls({
             {/* For touch devices: without a keyboard, Ctrl cannot be held to drag a shape freely. */}
             <ZoomButton
                 label={shapeSnapping ? "Einrasten ausschalten" : "Einrasten einschalten"}
-                title={shapeSnapping ? "Einrasten von Möbeln ausschalten" : "Einrasten von Möbeln einschalten"}
+                title={
+                    shapeSnapping
+                        ? "Einrasten von Möbeln und Hilfslinien beim Raumzeichnen ausschalten"
+                        : "Einrasten von Möbeln und Hilfslinien beim Raumzeichnen einschalten"
+                }
                 pressed={shapeSnapping}
                 onClick={onToggleShapeSnapping}
                 disabled={false}

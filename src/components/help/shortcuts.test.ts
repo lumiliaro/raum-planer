@@ -38,6 +38,17 @@ describe("SHORTCUT_GROUPS", () => {
         ]);
     });
 
+    it("lists the keys while drawing a room", () => {
+        expect(group("Raum zeichnen").entries).toEqual([
+            { keys: ["Ziffern"], description: "Länge in cm eingeben" },
+            { keys: ["Enter"], description: "Eckpunkt setzen, bei leerem Feld Umriss schließen" },
+            { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Eckpunkt löschen" },
+            { keys: ["Umschalt"], description: "Kante ohne Einrasten auf 0°/90°/180°/270°" },
+            { keys: ["Strg"], description: "Ohne Hilfslinien" },
+            { keys: ["Esc"], description: "Umriss verwerfen" },
+        ]);
+    });
+
     it("shows redo with both alternatives", () => {
         expect(group("Allgemein").entries).toContainEqual({ keys: ["Strg+Umschalt+Z", "Strg+Y"], description: "Wiederholen" });
     });
