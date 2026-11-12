@@ -1,13 +1,28 @@
 # Haus-Gestalter
 
 Persönliche Web-App zur Einzugs- und Raumplanung für genau ein Haus.
-Möbel werden als Formen mit exakten Maßen auf den festen Grundrissen
-(Erdgeschoss, Obergeschoss, Dachgeschoss) platziert, verschoben, gedreht,
-beschriftet und eingefärbt. Die Planung lässt sich als Datei exportieren
-und wieder importieren.
+Etagen und Räume werden mit ihren Innenmaßen in cm angelegt, optional über
+einem eingescannten Grundriss als Vorlage. Möbel werden als Formen mit
+exakten Maßen platziert, verschoben, gedreht, beschriftet und eingefärbt.
+Die Planung lässt sich als Datei exportieren und wieder importieren und als
+PDF drucken.
 
 Die App läuft komplett im Browser: kein Backend, keine Accounts, keine
 Netzwerkaufrufe zur Laufzeit.
+
+## Online nutzen
+
+<https://lumiliaro.github.io/raum-planer/>
+
+- Alle Pläne und Vorlagenbilder liegen nur im Browser des Besuchers
+  (localStorage und IndexedDB). Es wird nichts an einen Server geschickt,
+  und jeder Browser hat seinen eigenen Stand.
+- Pläne aus der lokalen Entwicklung (`localhost`) erscheinen dort nicht von
+  selbst: lokal exportieren und online importieren.
+- Der Browser kann seinen Speicher leeren. Ein Export dient als Sicherung.
+- Jeder Push auf `main` wird über GitHub Actions geprüft (Lint, Tests,
+  Build) und anschließend automatisch veröffentlicht
+  (`.github/workflows/deploy.yml`).
 
 ## Tech-Stack
 
@@ -33,7 +48,9 @@ npm run lint       # oxlint
 
 ## Projektstruktur
 
-- `public/plans/` – Grundrisse als PNG (`eg.png`, `og.png`, `dg.png`)
-- `src/config/house.ts` – feste Haus-Konfiguration mit Etagen und Kalibrierung
-- `src/components/ui/` – shadcn/ui-Komponenten
+- `src/lib/` – reine Logik (Geometrie, Kalibrierung, Plan-Schema, Import/Export, PDF-Layout) mit Vitest-Tests
+- `src/store/` – zentraler Zustand-Store mit Undo/Redo
+- `src/storage/` – Vorlagenbilder in IndexedDB
+- `src/components/` – Oberfläche und Zeichenfläche; `src/components/ui/` enthält die shadcn/ui-Komponenten
+- `.github/workflows/deploy.yml` – Build und Veröffentlichung auf GitHub Pages
 - `openspec/` – Spezifikationen und Änderungsvorschläge (OpenSpec)
