@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getLabelAnchorCm, getOutlineCm, MAX_CURVE_DEVIATION_CM, sampleEllipseArc } from "@/lib/outline";
+import { getLabelAnchorCm, getOutlineCm, MAX_CURVE_DEVIATION_CM, sampleEllipseArc, shapeBoundsCm } from "@/lib/outline";
 import type { PointCm, Shape } from "@/lib/plan-schema";
 import { rect, STYLE, uuid } from "@/test/plan-fixtures";
 
@@ -357,5 +357,49 @@ describe("getLabelAnchorCm – further shapes", () => {
         expect(plain.y).toBeCloseTo(45 - 38.2, 1);
         const mirrored = getLabelAnchorCm(door(90, true));
         expect(mirrored).toEqual({ x: -plain.x, y: plain.y });
+    });
+});
+
+describe("shapeBoundsCm", () => {
+    it("is the rectangle around an unrotated rectangle", () => {
+        const shape = rect(1, { widthCm: 200, depthCm: 100, x: 300, y: 200, rotationDeg: 0 });
+        expect(shapeBoundsCm(shape)).toEqual({ x: 200, y: 150, width: 200, height: 100 });
+    });
+
+    it("swaps width and depth at 90°", () => {
+        const shape = rect(1, { widthCm: 200, depthCm: 100, x: 300, y: 200, rotationDeg: 90 });
+        expect(shapeBoundsCm(shape)).toEqual({ x: 250, y: 100, width: 100, height: 200 });
+    });
+
+    it("is the same for a mirrored L-shape", () => {
+        const lShape = (mirrored: boolean): Shape => ({
+            id: uuid(60),
+            kind: "l-shape",
+            x: 100,
+            y: 50,
+            rotationDeg: 0,
+            mirrored,
+            style: STYLE,
+            widthCm: 240,
+            depthCm: 180,
+            legAWidthCm: 90,
+            legBWidthCm: 60,
+        });
+        expect(shapeBoundsCm(lShape(true))).toEqual(shapeBoundsCm(lShape(false)));
+        expect(shapeBoundsCm(lShape(false))).toEqual({ x: -20, y: -40, width: 240, height: 180 });
+    });
+
+    it("is null for a polygon", () => {
+        const polygon = {
+            id: uuid(61),
+            kind: "polygon",
+            x: 0,
+            y: 0,
+            rotationDeg: 0,
+            mirrored: false,
+            style: STYLE,
+            pointsCm: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }],
+        } as Shape;
+        expect(shapeBoundsCm(polygon)).toBeNull();
     });
 });

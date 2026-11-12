@@ -5,6 +5,7 @@
  */
 
 import type { PointCm, Shape } from "@/lib/plan-schema";
+import type { RectCm } from "@/lib/viewport";
 
 /** Centroid of a quarter ellipse, as a fraction of its radii from the right angle: 4 / (3π). */
 const QUARTER_CENTROID = 4 / (3 * Math.PI);
@@ -87,6 +88,31 @@ function baseOutline(shape: Shape): PointCm[] | null {
             throw new Error(`Unknown shape kind: ${(unhandled as Shape).kind}`);
         }
     }
+}
+
+/**
+ * The shape's outline in cm with its rotation and position (absolute);
+ * `null` for kinds without outline. Exact at multiples of 90°.
+ */
+export function placedOutlineCm(shape: Shape): PointCm[] | null {
+    const outline = getOutlineCm(shape);
+    if (!outline) return null;
+    const [cos, sin] = unitAt(shape.rotationDeg);
+    return outline.map((p) => ({ x: shape.x + p.x * cos - p.y * sin, y: shape.y + p.x * sin + p.y * cos }));
+}
+
+/**
+ * Smallest axis-parallel rectangle around the rotated, placed outline (its
+ * AABB); `null` for kinds without outline.
+ */
+export function shapeBoundsCm(shape: Shape): RectCm | null {
+    const points = placedOutlineCm(shape);
+    if (!points) return null;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
 /** Arcs get at least this many segments. */
