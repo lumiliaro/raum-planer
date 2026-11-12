@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+    // GitHub Pages serves the app from https://lumiliaro.github.io/raum-planer/.
+    // The dev server keeps the root path.
+    base: command === "build" ? "/raum-planer/" : "/",
     plugins: [react(), tailwindcss()],
     resolve: {
         alias: {
@@ -15,4 +18,4 @@ export default defineConfig({
         environment: "node",
         include: ["src/**/*.test.ts"],
     },
-});
+}));
