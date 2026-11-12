@@ -1502,6 +1502,69 @@ describe("app store", () => {
         });
     });
 
+    describe("room drag and shapes moving with their room", () => {
+        /** „Bad“ (0|0)–(300|200) with a locked tub at (120|80), a table outside at (600|100); „Diele“ (locked) with a shelf inside. */
+        const BAD = room(12, "Bad", rectPoints(0, 0, 300, 200));
+        const DIELE = room(11, "Diele", rectPoints(349, 0, 150, 200), [], undefined, null, true);
+        const TUB = rect(1, { x: 120, y: 80, locked: true });
+        const TABLE = rect(2, { x: 600, y: 100 });
+        const SHELF = rect(3, { x: 400, y: 100 });
+
+        function setup() {
+            const storage = storedPlan((p) => {
+                let plan = addRoom(addRoom(p, "eg", BAD, CREATED), "eg", DIELE, CREATED);
+                for (const shape of [TUB, TABLE, SHELF]) plan = addShape(plan, "eg", shape, CREATED);
+                return plan;
+            });
+            const store = createAppStore(storage, { now });
+            const steps = () => store.temporal.getState().pastStates.length;
+            const shapes = () => store.getState().plan.shapesByFloor.eg;
+            return { store, steps, shapes };
+        }
+
+        const DRAG = { floorId: "eg", id: BAD.id, dx: -30, dy: 0, stuckEdges: [{ roomId: DIELE.id, edgeIndex: 3 }] };
+
+        it("keeps the room drag out of the history and clears it on floor switch and import", () => {
+            const { store, steps } = setup();
+            const plan = store.getState().plan;
+            store.getState().setRoomDrag(DRAG);
+            expect(store.getState().roomDrag).toEqual(DRAG);
+            expect(store.getState().plan).toBe(plan);
+            store.getState().setRoomDrag(null);
+            expect(store.getState().roomDrag).toBeNull();
+            expect(steps()).toBe(0);
+            store.getState().setRoomDrag(DRAG);
+            store.getState().setActiveFloor("og");
+            expect(store.getState().roomDrag).toBeNull();
+            store.getState().setRoomDrag(DRAG);
+            store.getState().replacePlan(createEmptyPlan(NOW, newId));
+            expect(store.getState().roomDrag).toBeNull();
+        });
+
+        it("moves „Bad“ with its locked tub in one step; one undo restores both and selects „Bad“ (Verschieben mit Möbel rückgängig)", () => {
+            const { store, steps, shapes } = setup();
+            store.getState().selectRoom(BAD.id);
+            expect(store.getState().moveRoom("eg", BAD.id, -30, 0)).toBe(true);
+            expect(steps()).toBe(1);
+            expect(store.getState().plan.roomsByFloor.eg[0].pointsCm).toEqual(rectPoints(-30, 0, 300, 200));
+            expect(shapes()).toEqual([{ ...TUB, x: 90, y: 80 }, TABLE, SHELF]);
+            store.getState().selectShape(uuid(1));
+            expect(store.getState().undo()).toBe(true);
+            expect(store.getState().plan.roomsByFloor.eg[0]).toEqual(BAD);
+            expect(shapes()).toEqual([TUB, TABLE, SHELF]);
+            expect(store.getState().selectedRoomId).toBe(BAD.id);
+            expect(store.getState().selectedShapeId).toBeNull();
+        });
+
+        it("moving a locked room changes neither the room nor its shapes (Gesperrter Raum nimmt nichts mit)", () => {
+            const { store, steps } = setup();
+            const plan = store.getState().plan;
+            expect(store.getState().moveRoom("eg", DIELE.id, 50, 0)).toBe(false);
+            expect(store.getState().plan).toBe(plan);
+            expect(steps()).toBe(0);
+        });
+    });
+
     describe("room lock", () => {
         /** „Wohnen“ (0|0)–(500|400) with a window on the bottom edge, „Diele“ (locked) on the ground floor, „Bad“ (locked) upstairs. */
         const WOHNEN = room(10, "Wohnen", rectPoints(0, 0, 500, 400));
