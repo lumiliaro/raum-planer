@@ -11,7 +11,7 @@
 ## 2. Favicon
 
 - [x] 2.1 `public/favicon.svg` durch ein handgeschriebenes SVG ersetzen (32×32-ViewBox, abgerundete Kachel in `#3F3F46`, heller Grundriss mit Außenrahmen, zwei Innenwänden und einer Türlücke, Striche ≥ 2 Einheiten); prüfen: Datei ist gültiges SVG und enthält keine Vite-Farben (`#863bff`, `#47bfff`)
-- [ ] 2.2 Manuell im Browser prüfen (nach hartem Neuladen): Tab zeigt das Grundriss-Icon bei hellem und bei dunklem Farbschema
+- [x] 2.2 Manuell im Browser prüfen (nach hartem Neuladen): Tab zeigt das Grundriss-Icon bei hellem und bei dunklem Farbschema
 
 ## 3. Abschluss
 
