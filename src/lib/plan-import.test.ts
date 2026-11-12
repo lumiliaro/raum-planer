@@ -80,7 +80,7 @@ describe("analyzePlanFile – errors", () => {
 
     it.each([
         ["an object without plan", { name: "x" }],
-        ["a package.json", { name: "haus-gestalter", version: "0.0.0", scripts: { dev: "vite" } }],
+        ["a package.json", { name: "raum-planer", version: "0.0.0", scripts: { dev: "vite" } }],
         ["schemaVersion 0", file({ schemaVersion: 0 })],
         ["schemaVersion as string", file({ schemaVersion: "1" })],
         ["schemaVersion 1.5", file({ schemaVersion: 1.5 })],

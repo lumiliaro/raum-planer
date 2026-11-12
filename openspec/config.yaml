@@ -1,8 +1,9 @@
 schema: spec-driven
 
 context: |
-    Projekt: Raumplaner – persönliche, maßgeschneiderte Web-App zur Einzugs- und
-    Raumplanung für genau ein Haus. Kein Produkt für andere Nutzer.
+    Projekt: Raumplaner – Web-App zur Raum- und Einrichtungsplanung für eine
+    beliebige Wohnung oder ein beliebiges Haus. Der Grundriss ist nicht fest
+    eingebaut, sondern wird vom Nutzer selbst erstellt.
     Etagen und Grundrisse sind Nutzerdaten: Der Nutzer legt Etagen an und
     zeichnet je Etage die Räume mit ihren Innenmaßen in cm nach. Ein
     eingescannter Grundriss kann optional als ausblendbare Vorlage darunter
