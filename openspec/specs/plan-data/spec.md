@@ -7,7 +7,7 @@ Legt fest, wie ein Plan, seine Kalibrierungen und seine Möbelformen aufgebaut s
 ## Requirements
 
 ### Requirement: Aufbau des Plans
-Ein Plan SHALL enthalten: die Formatversion `schemaVersion`, einen Namen, Zeitpunkt der Erstellung und der letzten inhaltlichen Änderung, die geordnete Liste seiner Etagen (siehe `floor-management`), die aktive Etage, je Etage höchstens eine Vorlage (siehe `floor-underlay`), je Etage eine geordnete Liste von Räumen (siehe „Räume im Plan“), je Etage eine geordnete Liste von Formen und die Einstellungen des Plans (siehe `app-settings`). Jede Form, jeder Raum und jede Vorlage MUST genau einer Etage des Plans gehören, und die aktive Etage MUST eine Etage des Plans sein. Die Formatversion des Plans ist 10.
+Ein Plan SHALL enthalten: die Formatversion `schemaVersion`, einen Namen, Zeitpunkt der Erstellung und der letzten inhaltlichen Änderung, die geordnete Liste seiner Etagen (siehe `floor-management`), die aktive Etage, je Etage höchstens eine Vorlage (siehe `floor-underlay`), je Etage eine geordnete Liste von Räumen (siehe „Räume im Plan“), je Etage eine geordnete Liste von Formen und die Einstellungen des Plans (siehe `app-settings`). Jede Form, jeder Raum und jede Vorlage MUST genau einer Etage des Plans gehören, und die aktive Etage MUST eine Etage des Plans sein. Die Formatversion des Plans ist 11.
 
 #### Scenario: Formen je Etage
 - **GIVEN** ein Plan mit zwei Formen im Erdgeschoss und einer Form im Obergeschoss
@@ -33,11 +33,11 @@ Ein Plan SHALL enthalten: die Formatversion `schemaVersion`, einen Namen, Zeitpu
 - **THEN** gilt der Plan als ungültig
 
 ### Requirement: Neuer leerer Plan
-Das System SHALL einen neuen Plan mit Formatversion 10, dem Namen „Meine Planung“ und genau einer Etage „Erdgeschoss“ anlegen. Diese Etage MUST aktiv sein, keine Vorlage, eine leere Raumliste und eine leere Formenliste haben, und der Plan MUST die Werkseinstellungen haben. Erstellungs- und Änderungszeitpunkt MUST dem Zeitpunkt des Anlegens entsprechen.
+Das System SHALL einen neuen Plan mit Formatversion 11, dem Namen „Meine Planung“ und genau einer Etage „Erdgeschoss“ anlegen. Diese Etage MUST aktiv sein, keine Vorlage, eine leere Raumliste und eine leere Formenliste haben, und der Plan MUST die Werkseinstellungen haben. Erstellungs- und Änderungszeitpunkt MUST dem Zeitpunkt des Anlegens entsprechen.
 
 #### Scenario: Leerer Plan
 - **WHEN** ein neuer Plan angelegt wird
-- **THEN** hat er die Formatversion 10 und den Namen „Meine Planung“
+- **THEN** hat er die Formatversion 11 und den Namen „Meine Planung“
 - **AND** er hat genau eine Etage „Erdgeschoss“, und sie ist aktiv
 - **AND** das Erdgeschoss hat eine leere Raumliste, eine leere Formenliste und keine Vorlage
 - **AND** der Plan hat die Werkseinstellungen, z. B. Wanddicke neuer Räume 15 cm
@@ -344,3 +344,23 @@ Ab Formatversion 10 SHALL jede Öffnung gemerkte Maße für „Ganze Kante“ en
 #### Scenario: Öffnung ohne gemerkte Maße
 - **WHEN** ein Plan mit einer Tür und einem Durchgang geprüft wird, die beide keine gemerkten Maße haben
 - **THEN** gilt er als gültig
+
+### Requirement: Sperre eines Raums im Plan
+Ab Formatversion 11 SHALL jeder Raum angeben, ob er gesperrt ist (siehe `floor-rooms`). Ein neu gezeichneter Raum MUST nicht gesperrt sein. Sperren und Entsperren eines Raums SHALL den Änderungszeitpunkt auf den aktuellen Zeitpunkt setzen.
+
+#### Scenario: Gesperrter Raum
+- **WHEN** ein Plan geprüft wird, in dem der Raum „Flur“ gesperrt ist
+- **THEN** gilt er als gültig
+
+#### Scenario: Raum ohne Sperrangabe
+- **WHEN** ein Plan der Formatversion 11 geprüft wird, in dem beim Raum „Flur“ die Angabe zur Sperre fehlt
+- **THEN** gilt er als ungültig
+
+#### Scenario: Neuer Raum
+- **WHEN** der Nutzer einen Raum mit dem Werkzeug „Raum“ zeichnet und schließt
+- **THEN** ist der neue Raum nicht gesperrt
+
+#### Scenario: Änderungszeitpunkt
+- **GIVEN** der Plan wurde zuletzt am 01.11.2026 um 10:00 Uhr geändert
+- **WHEN** am 12.11.2026 um 18:30 Uhr der Raum „Bad“ gesperrt wird
+- **THEN** ist der Änderungszeitpunkt 12.11.2026, 18:30 Uhr
