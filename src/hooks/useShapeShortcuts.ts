@@ -4,6 +4,14 @@ import { toolForKey } from "@/components/layout/tools";
 import { isEditableTarget, isInDialog, targetOwnsUndo } from "@/hooks/isEditableTarget";
 import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppStore } from "@/store/app-store";
 
+/** Ctrl/⌘ + key → clipboard action of the store. */
+const CLIPBOARD_ACTIONS: Readonly<Record<string, "copySelection" | "cutSelection" | "pasteClipboard" | "duplicateSelection">> = {
+    c: "copySelection",
+    x: "cutSelection",
+    v: "pasteClipboard",
+    d: "duplicateSelection",
+};
+
 /**
  * Tool and shape shortcuts: ? opens „Hilfe“, the keys of `TOOLS` (V, R, E, L, U, C, G, T, F) choose a
  * tool, Esc cancels a tool or clears the selection, Delete/Backspace
@@ -11,7 +19,11 @@ import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppS
  * Shift to the top/bottom), B shows or hides the active floor's underlay, M shows or hides the
  * dimensions. Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z and Ctrl/⌘+Y redo
  * everywhere like the header buttons – except in a text field with uncommitted
- * text (`targetOwnsUndo`) and while a shape is dragged or transformed. The
+ * text (`targetOwnsUndo`) and while a shape is dragged or transformed.
+ * Ctrl/⌘+C, X, V and D copy, cut, paste and duplicate the selected room or
+ * shape (app clipboard, see `@/lib/clipboard`) – not in any text field, not
+ * while dragging or transforming and not with Shift or Alt; the key is taken
+ * from the browser only when the action did something. The
  * other keys are ignored in text fields (not on checkboxes, sliders, color
  * fields or buttons) and with Ctrl/Meta/Alt. The store decides what is allowed
  * (calibration mode, locked shape, floor without underlay, undo while a room
@@ -32,13 +44,22 @@ export function useShapeShortcuts() {
 
             if ((e.ctrlKey || e.metaKey) && !e.altKey) {
                 const key = e.key.toLowerCase();
-                // While typing in a field, the browser's own undo of the text stays in charge.
-                if ((key !== "z" && key !== "y") || targetOwnsUndo(e.target)) return;
-                e.preventDefault();
-                // Replacing the plan under a shape in mid-drag would let the release write a stale shape back.
+                if (key === "z" || key === "y") {
+                    // While typing in a field, the browser's own undo of the text stays in charge.
+                    if (targetOwnsUndo(e.target)) return;
+                    e.preventDefault();
+                    // Replacing the plan under a shape in mid-drag would let the release write a stale shape back.
+                    if (Konva.isDragging() || Konva.isTransforming()) return;
+                    if (key === "y" || e.shiftKey) state.redo();
+                    else state.undo();
+                    return;
+                }
+                const action = Object.hasOwn(CLIPBOARD_ACTIONS, key) ? CLIPBOARD_ACTIONS[key] : undefined;
+                // In any text field the browser copies and pastes text.
+                if (!action || e.shiftKey || isEditableTarget(e.target)) return;
                 if (Konva.isDragging() || Konva.isTransforming()) return;
-                if (key === "y" || e.shiftKey) state.redo();
-                else state.undo();
+                // Only take the key from the browser when something happened (Ctrl+D without selection stays a bookmark).
+                if (state[action]()) e.preventDefault();
                 return;
             }
             if (e.ctrlKey || e.metaKey || e.altKey || isEditableTarget(e.target)) return;

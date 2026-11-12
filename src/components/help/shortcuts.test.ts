@@ -29,6 +29,15 @@ describe("SHORTCUT_GROUPS", () => {
         expect(group("Allgemein").entries).toContainEqual({ keys: ["?"], description: "Hilfe öffnen" });
     });
 
+    it("starts „Auswahl“ with copy, cut, paste and duplicate", () => {
+        expect(group("Auswahl").entries.slice(0, 4)).toEqual([
+            { keys: ["Strg+C"], description: "Kopieren" },
+            { keys: ["Strg+X"], description: "Ausschneiden" },
+            { keys: ["Strg+V"], description: "Einfügen" },
+            { keys: ["Strg+D"], description: "Duplizieren" },
+        ]);
+    });
+
     it("shows redo with both alternatives", () => {
         expect(group("Allgemein").entries).toContainEqual({ keys: ["Strg+Umschalt+Z", "Strg+Y"], description: "Wiederholen" });
     });

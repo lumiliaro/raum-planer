@@ -2,6 +2,15 @@ import { temporal } from "zundo";
 import { create, useStore } from "zustand";
 import { computeCalibration, formatLengthText, parseLengthCm, roundImagePoint } from "@/lib/calibration";
 import type { CalibrationAlign, ImagePoint } from "@/lib/calibration-schema";
+import {
+    copyRoom,
+    copyShape,
+    isFirstPasteAfterCut,
+    PASTE_OFFSET_CM,
+    pasteOffsetSteps,
+    type ClipboardItem,
+    type ClipboardState,
+} from "@/lib/clipboard";
 import { edgeFrame } from "@/lib/opening-geometry";
 import { createOpening, nearestRoomEdge, newOpeningSnap } from "@/lib/opening-placement";
 import * as planOps from "@/lib/plan";
@@ -173,6 +182,11 @@ export interface AppState {
     highlightedEdge: number | null;
     /** Session-only, not part of the history: the room being dragged, `null` = none. */
     roomDrag: RoomDrag | null;
+    /**
+     * Session-only, not part of the history, never saved or exported: the app's
+     * own clipboard (`@/lib/clipboard`), `null` = empty.
+     */
+    clipboard: ClipboardState | null;
     imageStoreStatus: ImageStoreStatus;
     /** Written by the canvas (`useUnderlayImage`), read by tool bar, status bar and panel. */
     imageAvailability: Partial<Record<ImageId, ImageAvailability>>;
@@ -228,6 +242,22 @@ export interface AppState {
     updateSelectedShape: (patch: ShapePatch) => boolean;
     /** Removes the selected shape and clears the selection; `false` without a selection. */
     deleteSelectedShape: () => boolean;
+
+    /**
+     * Clipboard actions for the selected room or shape of the active floor
+     * (not for an opening); `false` (no effect) without one. `copySelection`
+     * puts a snapshot into `clipboard` and changes no plan. `cutSelection` also
+     * deletes it (one undo step) – a locked one stays selected and is only
+     * copied. `pasteClipboard` adds a copy on the active floor (offset per
+     * `pasteOffsetSteps`), selects it and switches to "select"; `false` with an
+     * empty clipboard. `duplicateSelection` adds a copy 50 cm right and down
+     * and selects it, leaving `clipboard` alone. Paste, cut and duplicate are
+     * blocked in calibration mode, while a room is drawn or dragged.
+     */
+    copySelection: () => boolean;
+    cutSelection: () => boolean;
+    pasteClipboard: () => boolean;
+    duplicateSelection: () => boolean;
 
     /**
      * Room actions, one undo step each; `false` (no effect) when rejected
@@ -421,6 +451,46 @@ export function createAppStore(
                 const applyFloorChange = (fn: (plan: Plan) => Plan): boolean =>
                     get().calibrationDraft === null && applyPlan(fn);
 
+                /** Calibration mode, a room being drawn or dragged: no paste, cut or duplicate. */
+                const clipboardBlocked = () => {
+                    const { calibrationDraft, roomDraft, roomDrag } = get();
+                    return calibrationDraft !== null || roomDraft !== null || roomDrag !== null;
+                };
+
+                const selectedItem = (): ClipboardItem | null => {
+                    const shape = selectSelectedShape(get());
+                    if (shape) return { kind: "shape", shape };
+                    const room = selectSelectedRoom(get());
+                    return room ? { kind: "room", room } : null;
+                };
+
+                /**
+                 * Adds a copy of `item` moved by `steps` × `PASTE_OFFSET_CM` on top of
+                 * the floor and selects it, together with `extra` in one `set` (one undo step).
+                 */
+                const insertCopy = (
+                    floorId: FloorId,
+                    item: ClipboardItem,
+                    steps: number,
+                    keepName: boolean,
+                    extra: Partial<AppState> = {},
+                ): boolean => {
+                    const d = steps * PASTE_OFFSET_CM;
+                    const prev = get().plan;
+                    if (item.kind === "shape") {
+                        const copy = copyShape(item.shape, d, d, crypto.randomUUID());
+                        const next = planOps.addShape(prev, floorId, copy, now());
+                        if (next === prev) return false;
+                        set({ plan: next, ...RESET_TOOL_AND_SELECTION, selectedShapeId: copy.id, ...extra });
+                    } else {
+                        const copy = copyRoom(item.room, d, d, () => crypto.randomUUID(), { keepName });
+                        const next = planOps.addRoom(prev, floorId, copy, now());
+                        if (next === prev) return false;
+                        set({ plan: next, ...RESET_TOOL_AND_SELECTION, selectedRoomId: copy.id, ...extra });
+                    }
+                    return true;
+                };
+
                 /** Applies a pure plan operation; `false` if it returned the same plan (rejected). */
                 const applyPlan = (fn: (plan: Plan) => Plan): boolean => {
                     const prev = get().plan;
@@ -451,6 +521,7 @@ export function createAppStore(
                     roomDraft: null,
                     highlightedEdge: null,
                     roomDrag: null,
+                    clipboard: null,
                     imageStoreStatus: "ok",
                     imageAvailability: {},
 
@@ -543,6 +614,37 @@ export function createAppStore(
                         // A locked shape stays selected; a stale id is cleared.
                         if (removed || !selectSelectedShape(get())) set({ selectedShapeId: null });
                         return removed;
+                    },
+
+                    copySelection: () => {
+                        const item = selectedItem();
+                        if (!item) return false;
+                        const sourceFloorId = get().plan.activeFloorId;
+                        set({ clipboard: { item, sourceFloorId, cut: false, pastesByFloor: {} } });
+                        return true;
+                    },
+                    cutSelection: () => {
+                        const item = selectedItem();
+                        if (!item || clipboardBlocked()) return false;
+                        const sourceFloorId = get().plan.activeFloorId;
+                        // A locked original stays (and stays selected): then the entry acts like a copy.
+                        const cut = item.kind === "shape" ? get().deleteSelectedShape() : get().deleteSelectedRoom();
+                        set({ clipboard: { item, sourceFloorId, cut, pastesByFloor: {} } });
+                        return true;
+                    },
+                    pasteClipboard: () => {
+                        const clip = get().clipboard;
+                        if (!clip || clipboardBlocked()) return false;
+                        const floorId = get().plan.activeFloorId;
+                        const pastesByFloor = { ...clip.pastesByFloor, [floorId]: (clip.pastesByFloor[floorId] ?? 0) + 1 };
+                        return insertCopy(floorId, clip.item, pasteOffsetSteps(clip, floorId), isFirstPasteAfterCut(clip), {
+                            clipboard: { ...clip, pastesByFloor },
+                        });
+                    },
+                    duplicateSelection: () => {
+                        const item = selectedItem();
+                        if (!item || clipboardBlocked()) return false;
+                        return insertCopy(get().plan.activeFloorId, item, 1, false);
                     },
 
                     // Like the shape lock: enforced here, the plan operations stay lock-agnostic.

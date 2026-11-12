@@ -2223,4 +2223,269 @@ describe("app store", () => {
             expect(store.getState().activeTool).toBe("rect");
         });
     });
+
+    describe("clipboard", () => {
+        const DOOR: Opening = {
+            id: uuid(40),
+            kind: "door",
+            edgeIndex: 2,
+            offsetCm: 100,
+            widthCm: 80,
+            swing: { hinge: "start", side: "inside" },
+            beforeFullEdge: null,
+        };
+        const WINDOWS: Opening[] = [
+            { id: uuid(41), kind: "window", edgeIndex: 0, offsetCm: 50, widthCm: 100, swing: null, beforeFullEdge: null },
+            { id: uuid(42), kind: "window", edgeIndex: 0, offsetCm: 200, widthCm: 100, swing: null, beforeFullEdge: null },
+        ];
+        /** „Bad“ (0|0)–(400|300) with a door and two windows, 11,5 cm walls, blue. */
+        const BAD = room(10, "Bad", rectPoints(0, 0, 400, 300), [DOOR, ...WINDOWS], [11.5, 11.5, 11.5, 11.5], "#BFDBFE");
+        const KUECHE = room(11, "Küche", rectPoints(600, 0, 300, 300), [], undefined, null, true);
+
+        /** EG: rectangle 1 at (300|200), a tub (rect 2) inside „Bad“, locked rect 3, „Bad“ and locked „Küche“. */
+        function setup() {
+            const store = createAppStore(
+                storedPlan((p) => {
+                    let plan = addShape(p, "eg", rect(1, { x: 300, y: 200 }), CREATED);
+                    plan = addShape(plan, "eg", rect(2, { x: 100, y: 100, widthCm: 170, depthCm: 75, label: "Wanne" }), CREATED);
+                    plan = addShape(plan, "eg", rect(3, { x: 1000, y: 1000, rotationDeg: 90, locked: true }), CREATED);
+                    plan = addRoom(plan, "eg", BAD, CREATED);
+                    return addRoom(plan, "eg", KUECHE, CREATED);
+                }),
+                { now },
+            );
+            const steps = () => store.temporal.getState().pastStates.length;
+            const shapes = (floor = "eg") => store.getState().plan.shapesByFloor[floor];
+            const rooms = (floor = "eg") => store.getState().plan.roomsByFloor[floor];
+            const selected = () => selectSelectedShape(store.getState()) ?? selectSelectedRoom(store.getState());
+            return { store, steps, shapes, rooms, selected };
+        }
+
+        it("starts empty; copying changes neither the plan nor the history", () => {
+            const { store, steps } = setup();
+            expect(store.getState().clipboard).toBeNull();
+            const plan = store.getState().plan;
+            store.getState().selectShape(uuid(1));
+            expect(store.getState().copySelection()).toBe(true);
+            expect(store.getState().plan).toBe(plan);
+            expect(steps()).toBe(0);
+            expect(store.getState().clipboard?.item).toEqual({ kind: "shape", shape: rect(1, { x: 300, y: 200 }) });
+        });
+
+        it("copying without a selection or with an opening selected returns false and keeps the clipboard", () => {
+            const { store } = setup();
+            store.getState().selectRoom(BAD.id);
+            store.getState().copySelection();
+            const clip = store.getState().clipboard;
+            store.getState().selectShape(null);
+            expect(store.getState().copySelection()).toBe(false);
+            store.getState().selectOpening(DOOR.id);
+            expect(store.getState().copySelection()).toBe(false);
+            expect(store.getState().cutSelection()).toBe(false);
+            expect(store.getState().duplicateSelection()).toBe(false);
+            expect(store.getState().clipboard).toBe(clip);
+        });
+
+        it("pastes twice on the same floor at +50 cm and +100 cm, selected, one undo step each (Versetzt auf derselben Etage)", () => {
+            const { store, steps, shapes, selected } = setup();
+            store.getState().selectShape(uuid(1));
+            store.getState().copySelection();
+            store.getState().setActiveTool("rect");
+            expect(store.getState().pasteClipboard()).toBe(true);
+            expect(selected()).toMatchObject({ x: 350, y: 250 });
+            expect(store.getState().activeTool).toBe("select");
+            expect(store.getState().pasteClipboard()).toBe(true);
+            expect(selected()).toMatchObject({ x: 400, y: 300 });
+            expect(shapes().at(-1)).toBe(selected());
+            expect(shapes()).toHaveLength(5);
+            expect(steps()).toBe(2);
+            store.getState().undo();
+            expect(shapes()).toHaveLength(4);
+        });
+
+        it("pastes on another floor first at the same place, then +50 cm; a new copy starts over", () => {
+            const { store, rooms, selected } = setup();
+            store.getState().selectRoom(BAD.id);
+            store.getState().copySelection();
+            store.getState().setActiveFloor("og");
+            store.getState().pasteClipboard();
+            expect(rooms("og")[0].pointsCm).toEqual(rectPoints(0, 0, 400, 300));
+            store.getState().pasteClipboard();
+            expect(rooms("og")[1].pointsCm).toEqual(rectPoints(50, 50, 400, 300));
+            expect(selected()?.id).toBe(rooms("og")[1].id);
+
+            store.getState().setActiveFloor("eg");
+            store.getState().selectRoom(BAD.id);
+            store.getState().copySelection();
+            store.getState().pasteClipboard();
+            expect(rooms("eg").at(-1)?.pointsCm).toEqual(rectPoints(50, 50, 400, 300));
+            store.getState().setActiveFloor("og");
+            store.getState().pasteClipboard();
+            expect(rooms("og").at(-1)?.pointsCm).toEqual(rectPoints(0, 0, 400, 300));
+        });
+
+        it("a room copy takes over walls, color and openings with new ids, not the tub inside (Raum mit Tür, Möbel im Raum)", () => {
+            const { store, rooms, shapes } = setup();
+            store.getState().selectRoom(BAD.id);
+            store.getState().copySelection();
+            store.getState().pasteClipboard();
+            const copy = rooms().at(-1)!;
+            expect(copy).toMatchObject({ name: "Bad (Kopie)", wallThicknessCm: [11.5, 11.5, 11.5, 11.5], color: "#BFDBFE", locked: false });
+            expect(copy.openings.map(({ id: _id, ...o }) => o)).toEqual(BAD.openings.map(({ id: _id, ...o }) => o));
+            const allOpeningIds = rooms().flatMap((r) => r.openings.map((o) => o.id));
+            expect(new Set(allOpeningIds).size).toBe(allOpeningIds.length);
+            expect(shapes().filter((s) => s.label === "Wanne")).toHaveLength(1);
+        });
+
+        it("undoing a pasted room removes it with its windows; pasting again works", () => {
+            const { store, rooms } = setup();
+            store.getState().selectRoom(BAD.id);
+            store.getState().copySelection();
+            store.getState().pasteClipboard();
+            expect(rooms()).toHaveLength(3);
+            store.getState().undo();
+            expect(rooms()).toHaveLength(2);
+            expect(store.getState().pasteClipboard()).toBe(true);
+            expect(rooms()).toHaveLength(3);
+        });
+
+        it("a paste keeps the measures at the time of copying (Original nach dem Kopieren geändert)", () => {
+            const { store, selected } = setup();
+            store.getState().selectShape(uuid(1));
+            store.getState().copySelection();
+            store.getState().updateSelectedShape({ widthCm: 120 });
+            store.getState().pasteClipboard();
+            expect(selected()).toMatchObject({ widthCm: 200 });
+        });
+
+        it("cuts: original gone, nothing selected, one step; first paste in place with the old name, then +50 cm with „ (Kopie)“", () => {
+            const { store, steps, rooms, selected } = setup();
+            store.getState().selectRoom(BAD.id);
+            expect(store.getState().cutSelection()).toBe(true);
+            expect(rooms().some((r) => r.id === BAD.id)).toBe(false);
+            expect(selected()).toBeNull();
+            expect(steps()).toBe(1);
+            store.getState().pasteClipboard();
+            expect(selected()).toMatchObject({ name: "Bad", pointsCm: BAD.pointsCm });
+            store.getState().pasteClipboard();
+            expect(selected()).toMatchObject({ name: "Bad (Kopie)", pointsCm: rectPoints(50, 50, 400, 300) });
+        });
+
+        it("cut and paste upstairs moves a room there, keeping its name (In andere Etage verschieben)", () => {
+            const { store, rooms } = setup();
+            store.getState().selectRoom(BAD.id);
+            store.getState().cutSelection();
+            store.getState().setActiveFloor("og");
+            store.getState().pasteClipboard();
+            expect(rooms("og")[0]).toMatchObject({ name: "Bad", pointsCm: BAD.pointsCm });
+            store.getState().pasteClipboard();
+            expect(rooms("og")[1]).toMatchObject({ name: "Bad (Kopie)", pointsCm: rectPoints(50, 50, 400, 300) });
+        });
+
+        it("undoing a cut restores the original and keeps the clipboard", () => {
+            const { store, shapes } = setup();
+            store.getState().selectShape(uuid(1));
+            store.getState().cutSelection();
+            const clip = store.getState().clipboard;
+            store.getState().undo();
+            expect(shapes().find((s) => s.id === uuid(1))).toMatchObject({ x: 300, y: 200 });
+            expect(store.getState().clipboard).toBe(clip);
+        });
+
+        it("cutting a locked room only copies it; the paste is offset, unlocked and „ (Kopie)“ (Gesperrt ausschneiden)", () => {
+            const { store, steps, rooms, selected } = setup();
+            store.getState().selectRoom(KUECHE.id);
+            expect(store.getState().cutSelection()).toBe(true);
+            expect(rooms().some((r) => r.id === KUECHE.id)).toBe(true);
+            expect(selected()?.id).toBe(KUECHE.id);
+            expect(steps()).toBe(0);
+            store.getState().pasteClipboard();
+            expect(selected()).toMatchObject({ name: "Küche (Kopie)", locked: false, pointsCm: rectPoints(650, 50, 300, 300) });
+        });
+
+        it("a copy of a locked shape is not locked (Gesperrtes Original)", () => {
+            const { store, selected } = setup();
+            store.getState().selectShape(uuid(3));
+            store.getState().copySelection();
+            store.getState().pasteClipboard();
+            const copy = selected()!;
+            expect(copy).toMatchObject({ rotationDeg: 90, widthCm: 200, depthCm: 90 });
+            expect(copy.locked).toBeFalsy();
+            expect(store.getState().updateShape("eg", copy.id, { x: 0 })).toBe(true);
+        });
+
+        it("duplicates twice at +50 cm each, the last one selected, the clipboard unchanged (Wiederholt duplizieren)", () => {
+            const { store, steps, shapes, selected } = setup();
+            store.getState().selectRoom(BAD.id);
+            store.getState().copySelection();
+            const clip = store.getState().clipboard;
+            store.getState().selectShape(uuid(2));
+            expect(store.getState().duplicateSelection()).toBe(true);
+            expect(store.getState().duplicateSelection()).toBe(true);
+            expect(shapes().slice(-2).map((s) => [s.x, s.y])).toEqual([
+                [150, 150],
+                [200, 200],
+            ]);
+            expect(selected()).toMatchObject({ x: 200, y: 200 });
+            expect(steps()).toBe(2);
+            expect(store.getState().clipboard).toBe(clip);
+            store.getState().pasteClipboard();
+            expect(selected()).toMatchObject({ name: "Bad (Kopie)" });
+        });
+
+        it("paste and duplicate do nothing with an empty clipboard, in calibration mode or while a room is drawn", () => {
+            const { store, rooms } = setup();
+            expect(store.getState().pasteClipboard()).toBe(false);
+            store.getState().selectShape(uuid(1));
+            store.getState().copySelection();
+            const plan = store.getState().plan;
+
+            store.getState().setActiveTool("room");
+            store.getState().addDraftPoint({ x: 0, y: 0 });
+            store.getState().addDraftPoint({ x: 100, y: 0 });
+            expect(store.getState().pasteClipboard()).toBe(false);
+            expect(store.getState().roomDraft?.points).toHaveLength(2);
+            store.getState().cancelDraft();
+
+            store.getState().toggleCalibration();
+            expect(store.getState().calibrationDraft).not.toBeNull();
+            expect(store.getState().pasteClipboard()).toBe(false);
+            store.getState().toggleCalibration();
+
+            store.getState().selectRoom(BAD.id);
+            store.getState().setRoomDrag({ floorId: "eg", id: BAD.id, dx: 10, dy: 0, stuckEdges: [] });
+            expect(store.getState().duplicateSelection()).toBe(false);
+            expect(store.getState().cutSelection()).toBe(false);
+            expect(store.getState().pasteClipboard()).toBe(false);
+            expect(store.getState().plan).toBe(plan);
+            expect(rooms()).toHaveLength(2);
+        });
+
+        it("undo and redo leave the clipboard alone", () => {
+            const { store } = setup();
+            store.getState().selectShape(uuid(1));
+            store.getState().copySelection();
+            store.getState().pasteClipboard();
+            const clip = store.getState().clipboard;
+            store.getState().undo();
+            expect(store.getState().clipboard).toBe(clip);
+            store.getState().redo();
+            expect(store.getState().clipboard).toBe(clip);
+        });
+
+        it("is not saved with the plan", () => {
+            const storage = storedPlan((p) => addShape(p, "eg", rect(1), CREATED));
+            const store = createAppStore(storage, { now });
+            const autosave = startPlanAutosave(store, storage, { delayMs: 0 });
+            store.getState().selectShape(uuid(1));
+            store.getState().copySelection();
+            store.getState().pasteClipboard();
+            autosave.flush();
+            autosave.stop();
+            const saved = storage.getItem(PLAN_STORAGE_KEY) ?? "";
+            expect(JSON.parse(saved).shapesByFloor.eg).toHaveLength(2);
+            expect(saved).not.toContain("clipboard");
+            expect(createAppStore(storage, { now }).getState().clipboard).toBeNull();
+        });
+    });
 });
