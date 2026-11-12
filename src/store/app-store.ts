@@ -26,7 +26,14 @@ import { loadPlan, savePlan, type LoadOutcome } from "@/lib/plan-storage";
 import { createShape, type InsertableKind } from "@/lib/shape-factory";
 import { canDeleteRoom, isRoomPatchAllowed } from "@/lib/room-lock";
 import { canDelete, isPatchAllowed } from "@/lib/shape-lock";
-import { getBrowserStorage, PROPERTIES_PANEL_OPEN_KEY, readBoolean, SHOW_DIMENSIONS_KEY, writeBoolean } from "@/lib/ui-prefs";
+import {
+    getBrowserStorage,
+    PROPERTIES_PANEL_OPEN_KEY,
+    readBoolean,
+    SHAPE_SNAPPING_KEY,
+    SHOW_DIMENSIONS_KEY,
+    writeBoolean,
+} from "@/lib/ui-prefs";
 import { underlayWithImage, type ImageAvailability, type UnderlayImage } from "@/lib/underlay";
 import type { Viewport } from "@/lib/viewport";
 import * as history from "@/store/history";
@@ -132,6 +139,8 @@ export interface AppState {
     propertiesPanelOpen: boolean;
     /** Dimensions of rooms and shapes on the canvas; a browser preference, not part of the plan or its history. */
     showDimensions: boolean;
+    /** Dragged shapes snap to snap lines (room center, openings, walls, shapes); a browser preference like `showDimensions`. */
+    shapeSnapping: boolean;
     /** `null` = calibration mode off. */
     calibrationDraft: CalibrationDraft | null;
     /** Session-only, starts as "select". */
@@ -160,6 +169,8 @@ export interface AppState {
     setViewport: (id: FloorId, vp: Viewport) => void;
     togglePropertiesPanel: () => void;
     toggleDimensions: () => void;
+    /** Turns snapping of dragged shapes on or off and remembers it in the browser. */
+    toggleShapeSnapping: () => void;
 
     /**
      * Shape actions return `false` and leave `plan` unchanged when the change is
@@ -403,6 +414,7 @@ export function createAppStore(
                     viewports: {},
                     propertiesPanelOpen: readBoolean(storage, PROPERTIES_PANEL_OPEN_KEY, true),
                     showDimensions: readBoolean(storage, SHOW_DIMENSIONS_KEY, false),
+                    shapeSnapping: readBoolean(storage, SHAPE_SNAPPING_KEY, true),
                     calibrationDraft: null,
                     activeTool: "select",
                     selectedShapeId: null,
@@ -432,6 +444,11 @@ export function createAppStore(
                         const show = !get().showDimensions;
                         writeBoolean(storage, SHOW_DIMENSIONS_KEY, show);
                         set({ showDimensions: show });
+                    },
+                    toggleShapeSnapping: () => {
+                        const on = !get().shapeSnapping;
+                        writeBoolean(storage, SHAPE_SNAPPING_KEY, on);
+                        set({ shapeSnapping: on });
                     },
 
                     addShape: (floorId, shape) => applyPlan((p) => planOps.addShape(p, floorId, shape, now())),

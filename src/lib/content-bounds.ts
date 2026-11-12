@@ -2,11 +2,11 @@
  * What „Einpassen“ shows on a floor: everything visible there. Pure.
  */
 
-import { getOutlineCm } from "@/lib/outline";
+import { placedOutlineCm } from "@/lib/outline";
 import type { Room, Shape, Underlay } from "@/lib/plan-schema";
 import { wallBandOutline } from "@/lib/room-geometry";
 import { underlayBoundsCm } from "@/lib/underlay";
-import type { Point, RectCm } from "@/lib/viewport";
+import type { RectCm } from "@/lib/viewport";
 
 /** Shown on a floor without visible content: 0 … 10 m in both directions. */
 export const EMPTY_FLOOR_BOUNDS: RectCm = { x: 0, y: 0, width: 1000, height: 1000 };
@@ -25,16 +25,6 @@ export interface FloorContent {
  */
 export function visibleUnderlayRect(underlay: Underlay | undefined, imageShown: boolean): RectCm | null {
     return underlay?.visible && imageShown ? underlayBoundsCm(underlay) : null;
-}
-
-/** The shape's outline in cm with its rotation and position; `null` for kinds without outline. */
-function placedOutlineCm(shape: Shape): Point[] | null {
-    const outline = getOutlineCm(shape);
-    if (!outline) return null;
-    const rad = (shape.rotationDeg * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-    return outline.map((p) => ({ x: shape.x + p.x * cos - p.y * sin, y: shape.y + p.x * sin + p.y * cos }));
 }
 
 /**

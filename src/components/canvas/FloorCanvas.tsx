@@ -36,6 +36,8 @@ export function FloorCanvas() {
     const calibrating = useAppStore((s) => s.calibrationDraft !== null);
     const showDimensions = useAppStore((s) => s.showDimensions);
     const toggleDimensions = useAppStore((s) => s.toggleDimensions);
+    const shapeSnapping = useAppStore((s) => s.shapeSnapping);
+    const toggleShapeSnapping = useAppStore((s) => s.toggleShapeSnapping);
     const addCalibrationPoint = useAppStore((s) => s.addCalibrationPoint);
     const underlay = useAppStore((s) => s.plan.underlayByFloor[floorId]);
     const shapes = useAppStore((s) => s.plan.shapesByFloor[floorId]);
@@ -295,6 +297,8 @@ export function FloorCanvas() {
                 onFit={fit}
                 showDimensions={showDimensions}
                 onToggleDimensions={toggleDimensions}
+                shapeSnapping={shapeSnapping}
+                onToggleShapeSnapping={toggleShapeSnapping}
             />
         </div>
     );

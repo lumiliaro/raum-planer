@@ -6,10 +6,21 @@ import { DimensionText } from "@/components/canvas/DimensionText";
 import { counterGroupTransform, labelAttrs } from "@/components/canvas/label-transform";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
 import { dimensionCenterCm, readableRotationDeg, shapeDimensions } from "@/lib/dimensions";
-import type { FloorId } from "@/lib/plan-schema";
-import { getLabelAnchorCm } from "@/lib/outline";
+import type { FloorId, Room } from "@/lib/plan-schema";
+import { getLabelAnchorCm, shapeBoundsCm } from "@/lib/outline";
 import type { PointCm, Shape } from "@/lib/plan-schema";
+import { boundsCm, shapeIdsInRoom } from "@/lib/room-geometry";
+import {
+    roomAtPoint,
+    roomSnapLines,
+    SHAPE_SNAP_TOLERANCE_PX,
+    snapShapeMove,
+    type ShapeExtent,
+    type SnapAxis,
+    type SnapLine,
+} from "@/lib/shape-snap";
 import { moveBy } from "@/lib/shape-transform";
+import type { RectCm } from "@/lib/viewport";
 import { snapDelta, snapStepCm } from "@/lib/snap";
 import { selectSettings, useAppStore } from "@/store/app-store";
 import { NO_FILL, SWING_DASH } from "@/components/canvas/canvas-style";
@@ -30,8 +41,27 @@ interface ShapeNodeProps {
     /** Show width and depth at the outline. */
     showDimensions: boolean;
     altRef: RefObject<boolean>;
+    /** „Einrasten“ switch: `false` = no snapping to snap lines, only the grid. */
+    snapping: boolean;
+    /** Ctrl held: no snapping to snap lines, only the grid. */
+    ctrlRef: RefObject<boolean>;
+    /** Rooms of the floor; the one under the dragged center gives the snap lines. */
+    rooms: readonly Room[];
+    /** All shapes of the floor; those in the same room are snap targets. */
+    shapes: readonly Shape[];
+    /** Reports the snap lines hit while dragging (only on change), `null` when none or on release. */
+    onSnapGuides: (guides: SnapGuides | null) => void;
     /** Preview offset in cm while the shape's room is dragged; drawn at `x + dx`, `y + dy`. */
     previewOffsetCm?: PointCm;
+}
+
+/** Snap lines hit by a dragged shape, drawn over the bounding box of its room. */
+export interface SnapGuides {
+    roomBoundsCm: RectCm;
+    /** `x = …` of the vertical guide, `null` = none. */
+    xCm: number | null;
+    /** `y = …` of the horizontal guide, `null` = none. */
+    yCm: number | null;
 }
 
 interface DragStart {
@@ -39,19 +69,54 @@ interface DragStart {
     abs: Konva.Vector2d;
     /** Last snapped offset in cm, used on release. */
     snappedCm: PointCm;
+    /** Snap lines per room id, computed once per room and drag. */
+    linesByRoom: Map<string, SnapLine[]>;
+    /** Identifies the last reported guides, to report only changes. */
+    guidesKey: string;
+}
+
+function newDrag(abs: Konva.Vector2d): DragStart {
+    return { abs, snappedCm: { x: 0, y: 0 }, linesByRoom: new Map(), guidesKey: "" };
+}
+
+/** Sides of the shape's rotated bounding box relative to its center; `null` without outline. */
+function shapeExtent(shape: Shape): Record<SnapAxis, ShapeExtent> | null {
+    const b = shapeBoundsCm(shape);
+    if (!b) return null;
+    return {
+        x: { min: b.x - shape.x, max: b.x + b.width - shape.x },
+        y: { min: b.y - shape.y, max: b.y + b.height - shape.y },
+    };
 }
 
 /**
  * One shape: a group at the shape's center (cm) with its rotation, a
  * closed line from `getOutlineCm`, its dimensions (with the display on) and the label, if any. A door is drawn from
  * the same points as a filled swing area, a solid leaf and a dashed swing. Dragging moves it relative to its start in
- * 5-cm steps (1 cm with Alt); the plan changes only on release. While the
+ * 5-cm steps (1 cm with Alt); the plan changes only on release. Per axis, a snap line of the room under the
+ * unsnapped center (room center, opening middles, walls, other shapes in the room; `roomSnapLines`) within
+ * `SHAPE_SNAP_TOLERANCE_PX` screen pixels takes precedence over the grid (`snapShapeMove`); the lines hit are
+ * reported via `onSnapGuides`. With the „Einrasten“ switch off, Ctrl held, outside every room or without outline only the grid applies. While the
  * room the shape lies in is dragged, `previewOffsetCm` draws it moved along;
  * on release the plan carries the move, so the shape does not jump.
  * While the transformer scales or rotates the shape, its dimensions are hidden;
  * after release they show the new values.
  */
-export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, showDimensions, altRef, previewOffsetCm }: ShapeNodeProps) {
+export function ShapeNode({
+    floorId,
+    shape,
+    outlineCm,
+    scale,
+    draggable,
+    showDimensions,
+    altRef,
+    snapping,
+    ctrlRef,
+    rooms,
+    shapes,
+    onSnapGuides,
+    previewOffsetCm,
+}: ShapeNodeProps) {
     const selectShape = useAppStore((s) => s.selectShape);
     const updateShape = useAppStore((s) => s.updateShape);
     const settings = useAppStore(selectSettings);
@@ -78,14 +143,50 @@ export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, showDim
 
     const cmPerScreenPx = 1 / scale;
 
+    const extent = useMemo(() => shapeExtent(shape), [shape]);
+
+    /** Snap lines of `room` without the dragged shape, cached for the drag. */
+    const linesOf = (drag: DragStart, room: Room): SnapLine[] => {
+        let lines = drag.linesByRoom.get(room.id);
+        if (!lines) {
+            const others = shapes.filter((s) => s.id !== shape.id);
+            const inRoom = new Set(shapeIdsInRoom(room.pointsCm, others));
+            lines = roomSnapLines(room, others.filter((s) => inRoom.has(s.id)));
+            drag.linesByRoom.set(room.id, lines);
+        }
+        return lines;
+    };
+
+    const reportGuides = (drag: DragStart, guides: SnapGuides | null) => {
+        const key = guides ? `${guides.xCm}|${guides.yCm}|${JSON.stringify(guides.roomBoundsCm)}` : "";
+        if (key === drag.guidesKey) return;
+        drag.guidesKey = key;
+        onSnapGuides(guides);
+    };
+
     const dragBound = function (this: Konva.Node, pos: Konva.Vector2d): Konva.Vector2d {
-        dragRef.current ??= { abs: this.absolutePosition(), snappedCm: { x: 0, y: 0 } };
+        dragRef.current ??= newDrag(this.absolutePosition());
         const drag = dragRef.current;
         const step = snapStepCm(altRef.current, settings);
-        const snappedCm = {
-            x: snapDelta((pos.x - drag.abs.x) * cmPerScreenPx, step),
-            y: snapDelta((pos.y - drag.abs.y) * cmPerScreenPx, step),
-        };
+        const rawCm = { x: (pos.x - drag.abs.x) * cmPerScreenPx, y: (pos.y - drag.abs.y) * cmPerScreenPx };
+        const room = !snapping || ctrlRef.current || !extent ? null : roomAtPoint(rooms, { x: shape.x + rawCm.x, y: shape.y + rawCm.y });
+        let snappedCm: PointCm;
+        if (room && extent) {
+            const result = snapShapeMove({
+                startCm: { x: shape.x, y: shape.y },
+                rawDeltaCm: rawCm,
+                stepCm: step,
+                extentCm: extent,
+                lines: linesOf(drag, room),
+                toleranceCm: SHAPE_SNAP_TOLERANCE_PX * cmPerScreenPx,
+            });
+            snappedCm = result.deltaCm;
+            const { x, y } = result.hits;
+            reportGuides(drag, x || y ? { roomBoundsCm: boundsCm(room.pointsCm), xCm: x?.valueCm ?? null, yCm: y?.valueCm ?? null } : null);
+        } else {
+            snappedCm = { x: snapDelta(rawCm.x, step), y: snapDelta(rawCm.y, step) };
+            reportGuides(drag, null);
+        }
         drag.snappedCm = snappedCm;
         return {
             x: drag.abs.x + snappedCm.x / cmPerScreenPx,
@@ -94,13 +195,14 @@ export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, showDim
     };
 
     const onDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
-        dragRef.current = { abs: e.target.absolutePosition(), snappedCm: { x: 0, y: 0 } };
+        dragRef.current = newDrag(e.target.absolutePosition());
         selectShape(shape.id);
     };
 
     const onDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
         const drag = dragRef.current;
         dragRef.current = null;
+        onSnapGuides(null);
         if (!drag) return;
         const { x: dx, y: dy } = drag.snappedCm;
         const moved = dx !== 0 || dy !== 0;

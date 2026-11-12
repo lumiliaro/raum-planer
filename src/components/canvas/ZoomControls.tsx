@@ -1,4 +1,4 @@
-import { Minus, Plus, Ruler, Scan } from "lucide-react";
+import { Magnet, Minus, Plus, Ruler, Scan } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatZoomPercent } from "@/lib/format";
 
@@ -9,9 +9,20 @@ interface ZoomControlsProps {
     onFit: () => void;
     showDimensions: boolean;
     onToggleDimensions: () => void;
+    shapeSnapping: boolean;
+    onToggleShapeSnapping: () => void;
 }
 
-export function ZoomControls({ scale, onZoomOut, onZoomIn, onFit, showDimensions, onToggleDimensions }: ZoomControlsProps) {
+export function ZoomControls({
+    scale,
+    onZoomOut,
+    onZoomIn,
+    onFit,
+    showDimensions,
+    onToggleDimensions,
+    shapeSnapping,
+    onToggleShapeSnapping,
+}: ZoomControlsProps) {
     const disabled = scale === null;
     return (
         <div className="absolute right-7 bottom-4 z-10 flex items-center gap-0.5 rounded-lg bg-background p-[3px] shadow-[0_1px_3px_rgba(0,0,0,.1),0_0_0_1px_var(--border)]">
@@ -38,6 +49,16 @@ export function ZoomControls({ scale, onZoomOut, onZoomIn, onFit, showDimensions
                 disabled={false}
             >
                 <Ruler />
+            </ZoomButton>
+            {/* For touch devices: without a keyboard, Ctrl cannot be held to drag a shape freely. */}
+            <ZoomButton
+                label={shapeSnapping ? "Einrasten ausschalten" : "Einrasten einschalten"}
+                title={shapeSnapping ? "Einrasten von Möbeln ausschalten" : "Einrasten von Möbeln einschalten"}
+                pressed={shapeSnapping}
+                onClick={onToggleShapeSnapping}
+                disabled={false}
+            >
+                <Magnet />
             </ZoomButton>
         </div>
     );
