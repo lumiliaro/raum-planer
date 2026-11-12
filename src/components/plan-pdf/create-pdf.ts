@@ -10,6 +10,7 @@ import { floorDrawing, renderFloor } from "@/components/plan-pdf/render-floor";
 import {
     drawingAreaMm,
     drawingTransform,
+    fitAreaMm,
     floorPrintContent,
     formatPrintDate,
     MARGIN_MM,
@@ -59,7 +60,7 @@ export async function createPdf(
         if (index > 0) doc.addPage("a4", options.orientation);
         const content = floorPrintContent(plan, floor.id, availableImages);
         const bounds = printContentBounds(content, options);
-        const denominator = pageScale(bounds, area, options.scale);
+        const denominator = pageScale(bounds, fitAreaMm(area, options), options.scale);
 
         drawHeader(doc, `${plan.name} – ${floor.name}`, date, options);
         if (bounds) {

@@ -13,11 +13,26 @@ import {
     ROOM_LABEL_COLOR,
     SWING_DASH,
 } from "@/components/canvas/canvas-style";
+import {
+    dimensionCenterCm,
+    dimensionFits,
+    placeRoomDimensions,
+    readableRotationDeg,
+    shapeDimensions,
+    type DimensionLabel,
+} from "@/lib/dimensions";
 import { formatAreaM2 } from "@/lib/format";
 import { gridLines } from "@/lib/grid";
 import { doorLeaf, edgeFrame, openingGap, windowSymbol } from "@/lib/opening-geometry";
 import { getLabelAnchorCm, getOutlineCm } from "@/lib/outline";
-import type { DrawingTransform, PdfOptions, SizeMm } from "@/lib/pdf-layout";
+import {
+    DIMENSION_FONT_MM,
+    DIMENSION_GAP_MM,
+    DIMENSION_HEIGHT_MM,
+    type DrawingTransform,
+    type PdfOptions,
+    type SizeMm,
+} from "@/lib/pdf-layout";
 import type { PointCm, Room, Shape, Underlay } from "@/lib/plan-schema";
 import { roomAreaFill } from "@/lib/room-colors";
 import { labelPointCm, roomAreaM2, wallBandOutline } from "@/lib/room-geometry";
@@ -39,6 +54,8 @@ const MAX_LABEL_WIDTH_MM = 60;
 const FONT_FAMILY = "Inter Variable, sans-serif";
 /** Width of an opening symbol's line in the editor (unselected), in screen px. */
 const OPENING_STROKE_PX = 1.5;
+/** Free space at both ends of a dimension on its edge, in mm. */
+const DIMENSION_MARGIN_MM = 1;
 
 export interface FloorDrawing {
     rooms: readonly Room[];
@@ -49,6 +66,8 @@ export interface FloorDrawing {
     /** Grid spacing in cm with „Raster“, `null` without. */
     gridStepCm: number | null;
     roomLabels: boolean;
+    /** „Maße“: room dimensions, and those of `shapes` (already empty without „Möbel“). */
+    dimensions: boolean;
     wallColor: string;
 }
 
@@ -65,6 +84,7 @@ export function floorDrawing(
         underlay: options.underlay && content.underlay && image ? { underlay: content.underlay, image } : null,
         gridStepCm: options.grid ? settings.gridStepCm : null,
         roomLabels: options.roomLabels,
+        dimensions: options.dimensions,
         wallColor: settings.wallColor,
     };
 }
@@ -93,7 +113,8 @@ function offscreenLayer(): Konva.Layer {
  * plan's cm placed by `transform`. Layers from bottom to top: white paper,
  * grid, underlay, room areas; the walls on their own layer (bands minus
  * insides and opening gaps via `destination-out`, so what lies below stays
- * visible); opening symbols, furniture in drawing order, room names with area.
+ * visible); opening symbols, room dimensions, furniture in drawing order
+ * (each with its dimensions), room names with area.
  */
 export async function renderFloor(drawing: FloorDrawing, area: SizeMm, transform: DrawingTransform): Promise<string> {
     await fontsReady();
@@ -134,7 +155,9 @@ export async function renderFloor(drawing: FloorDrawing, area: SizeMm, transform
 
         const above = offscreenLayer();
         addOpeningSymbols(above, drawing.rooms, cm);
-        for (const shape of drawing.shapes) addShape(above, shape, cm);
+        const dimensions = drawing.dimensions ? new DimensionPainter(transform.mmPerCm) : null;
+        dimensions?.addRooms(above, drawing.rooms);
+        for (const shape of drawing.shapes) addShape(above, shape, cm, dimensions);
         if (drawing.roomLabels) for (const room of drawing.rooms) addRoomLabel(above, room, cm);
 
         stage.add(below, walls, above);
@@ -237,7 +260,7 @@ function addOpeningSymbols(layer: Konva.Layer, rooms: readonly Room[], cm: (mm: 
 }
 
 /** One piece of furniture like `ShapeNode`: outline, fill, stroke, opacity, upright label. */
-function addShape(layer: Konva.Layer, shape: Shape, cm: (mm: number) => number) {
+function addShape(layer: Konva.Layer, shape: Shape, cm: (mm: number) => number, dimensions: DimensionPainter | null) {
     const outline = getOutlineCm(shape);
     if (!outline) return;
     const points = flat(outline);
@@ -258,6 +281,7 @@ function addShape(layer: Konva.Layer, shape: Shape, cm: (mm: number) => number) 
     } else {
         group.add(new Konva.Line({ points, closed: true, fill: style.fill ?? undefined, ...stroke }));
     }
+    dimensions?.addShape(group, shape);
     if (shape.label) {
         const anchor = getLabelAnchorCm(shape);
         group.add(
@@ -265,6 +289,79 @@ function addShape(layer: Konva.Layer, shape: Shape, cm: (mm: number) => number) 
         );
     }
     layer.add(group);
+}
+
+/**
+ * Dimensions on paper like the editor's (`DimensionText`): 2 mm text,
+ * 0,8 mm from the wall or edge, never upside down, left out when longer than
+ * its edge. Room dimensions are placed with `placeRoomDimensions`.
+ */
+class DimensionPainter {
+    private readonly widthsMm = new Map<string, number>();
+    private readonly measurer = new Konva.Text({ fontFamily: FONT_FAMILY, fontSize: 100 });
+
+    private readonly mmPerCm: number;
+
+    constructor(mmPerCm: number) {
+        this.mmPerCm = mmPerCm;
+    }
+
+    private cm(mm: number): number {
+        return mm / this.mmPerCm;
+    }
+
+    /** Width of the text in mm, measured at 100 px and scaled (tiny font sizes measure badly). */
+    private widthMm(text: string): number {
+        let width = this.widthsMm.get(text);
+        if (width === undefined) {
+            width = (this.measurer.measureSize(text).width / 100) * DIMENSION_FONT_MM;
+            this.widthsMm.set(text, width);
+        }
+        return width;
+    }
+
+    addRooms(layer: Konva.Layer, rooms: readonly Room[]) {
+        const placed = placeRoomDimensions(
+            rooms,
+            (text) => ({ widthCm: this.cm(this.widthMm(text)), heightCm: this.cm(DIMENSION_HEIGHT_MM) }),
+            this.cm(DIMENSION_GAP_MM),
+        );
+        for (const { label, centerCm } of placed.flat()) {
+            const node = this.node(label, centerCm, readableRotationDeg(label.edgeAngleDeg, 0), ROOM_LABEL_COLOR);
+            if (node) layer.add(node);
+        }
+    }
+
+    addShape(group: Konva.Group, shape: Shape) {
+        for (const label of shapeDimensions(shape)) {
+            const center = dimensionCenterCm(label, "inside", this.cm(DIMENSION_GAP_MM), this.cm(DIMENSION_HEIGHT_MM));
+            const node = this.node(label, center, readableRotationDeg(label.edgeAngleDeg, shape.rotationDeg), shape.style.stroke);
+            if (node) group.add(node);
+        }
+    }
+
+    private node(label: DimensionLabel, center: PointCm, rotation: number, color: string): Konva.Text | null {
+        const widthMm = this.widthMm(label.text);
+        if (!dimensionFits(widthMm, label.lengthCm * this.mmPerCm, DIMENSION_MARGIN_MM)) return null;
+        const width = this.cm(widthMm);
+        const height = this.cm(DIMENSION_HEIGHT_MM);
+        return new Konva.Text({
+            ...center,
+            rotation,
+            text: label.text,
+            width,
+            height,
+            offsetX: width / 2,
+            offsetY: height / 2,
+            align: "center",
+            verticalAlign: "middle",
+            wrap: "none",
+            fontFamily: FONT_FAMILY,
+            fontSize: this.cm(DIMENSION_FONT_MM),
+            fill: color,
+            perfectDrawEnabled: false,
+        });
+    }
 }
 
 /** Room name and below it the inner area („12,50 m²“), centered on the name's place in the editor. */

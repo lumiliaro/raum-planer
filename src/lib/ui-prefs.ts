@@ -4,6 +4,7 @@
  */
 
 export const PROPERTIES_PANEL_OPEN_KEY = "raumplaner.ui.propertiesPanelOpen";
+export const SHOW_DIMENSIONS_KEY = "raumplaner.ui.showDimensions";
 
 /** `window.localStorage`, or `undefined` when unavailable or blocked. */
 export function getBrowserStorage(): Storage | undefined {

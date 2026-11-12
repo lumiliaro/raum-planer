@@ -3,6 +3,7 @@ import {
     defaultPdfOptions,
     drawingAreaMm,
     drawingTransform,
+    fitAreaMm,
     fitScaleDenominator,
     fitsAtScale,
     formatPrintDate,
@@ -92,7 +93,7 @@ const portrait = drawingAreaMm("portrait");
 const landscape = drawingAreaMm("landscape");
 
 describe("defaultPdfOptions", () => {
-    it("checks all floors, portrait, 1:100, furniture and room labels on, underlay and grid off", () => {
+    it("checks all floors, portrait, 1:100, furniture and room labels on, dimensions, underlay and grid off", () => {
         const p = plan([{ name: "Erdgeschoss" }, { name: "Obergeschoss" }]);
         expect(defaultPdfOptions(p)).toEqual({
             floorIds: p.floors.map((f) => f.id),
@@ -100,6 +101,7 @@ describe("defaultPdfOptions", () => {
             scale: 100,
             furniture: true,
             roomLabels: true,
+            dimensions: false,
             underlay: false,
             grid: false,
         });
@@ -150,6 +152,41 @@ describe("printContentBounds", () => {
         expect(
             printContentBounds(content({ underlay, imageAvailable: true }), { furniture: true, underlay: false }),
         ).toBeNull();
+    });
+});
+
+describe("room for dimensions", () => {
+    /** One room of 1385 × 500 cm with its walls: exactly 277 × 100 mm, landscape at 1:50. */
+    const exact = plan([{ name: "Erdgeschoss", rooms: [room(0, 0, 1355, 470)] }]);
+    const opts = (dimensions: boolean, scale: PdfOptions["scale"]): PdfOptions => ({
+        ...defaultPdfOptions(exact),
+        orientation: "landscape",
+        scale,
+        dimensions,
+    });
+
+    it("does not change the content's bounds", () => {
+        const c = content({ rooms: [room(0, 0, 400, 300)], shapes: [bed(100, 100)] });
+        const base = { furniture: true, underlay: false };
+        expect(printContentBounds(c, { ...base, dimensions: true } as PdfOptions)).toEqual(printContentBounds(c, base));
+    });
+
+    it("leaves the area as it is without „Maße“ and takes 3,3 mm from every side with it", () => {
+        expect(fitAreaMm(landscape, { dimensions: false })).toEqual({ width: 277, height: 163 });
+        const smaller = fitAreaMm(landscape, { dimensions: true });
+        expect(smaller.width).toBeCloseTo(277 - 6.6, 9);
+        expect(smaller.height).toBeCloseTo(163 - 6.6, 9);
+    });
+
+    it("fits content that just fits at 1:50 at a smaller scale with „Maße“", () => {
+        const bounds = printContentBounds(content({ rooms: exact.roomsByFloor[exact.activeFloorId] }), opts(false, "fit"))!;
+        expect(pageScale(bounds, fitAreaMm(landscape, { dimensions: false }), "fit")).toBe(50);
+        expect(pageScale(bounds, fitAreaMm(landscape, { dimensions: true }), "fit")).toBeGreaterThan(50);
+    });
+
+    it("reports content that just fits at 1:50 as too large with „Maße“", () => {
+        expect(pdfIssues(exact, opts(false, 50), new Set()).tooLarge).toEqual([]);
+        expect(pdfIssues(exact, opts(true, 50), new Set()).tooLarge).toEqual(["Erdgeschoss"]);
     });
 });
 

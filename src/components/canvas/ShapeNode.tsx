@@ -1,8 +1,11 @@
 import type Konva from "konva";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { Group, Line } from "react-konva";
+import { DIMENSION_GAP_PX, DIMENSION_HEIGHT_PX } from "@/components/canvas/dimension-measure";
+import { DimensionText } from "@/components/canvas/DimensionText";
 import { counterGroupTransform, labelAttrs } from "@/components/canvas/label-transform";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
+import { dimensionCenterCm, readableRotationDeg, shapeDimensions } from "@/lib/dimensions";
 import type { FloorId } from "@/lib/plan-schema";
 import { getLabelAnchorCm } from "@/lib/outline";
 import type { PointCm, Shape } from "@/lib/plan-schema";
@@ -24,6 +27,8 @@ interface ShapeNodeProps {
     /** Current stage scale (screen px per cm). */
     scale: number;
     draggable: boolean;
+    /** Show width and depth at the outline. */
+    showDimensions: boolean;
     altRef: RefObject<boolean>;
     /** Preview offset in cm while the shape's room is dragged; drawn at `x + dx`, `y + dy`. */
     previewOffsetCm?: PointCm;
@@ -38,19 +43,23 @@ interface DragStart {
 
 /**
  * One shape: a group at the shape's center (cm) with its rotation, a
- * closed line from `getOutlineCm` and the label, if any. A door is drawn from
+ * closed line from `getOutlineCm`, its dimensions (with the display on) and the label, if any. A door is drawn from
  * the same points as a filled swing area, a solid leaf and a dashed swing. Dragging moves it relative to its start in
  * 5-cm steps (1 cm with Alt); the plan changes only on release. While the
  * room the shape lies in is dragged, `previewOffsetCm` draws it moved along;
  * on release the plan carries the move, so the shape does not jump.
+ * While the transformer scales or rotates the shape, its dimensions are hidden;
+ * after release they show the new values.
  */
-export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef, previewOffsetCm }: ShapeNodeProps) {
+export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, showDimensions, altRef, previewOffsetCm }: ShapeNodeProps) {
     const selectShape = useAppStore((s) => s.selectShape);
     const updateShape = useAppStore((s) => s.updateShape);
     const settings = useAppStore(selectSettings);
     const groupRef = useRef<Konva.Group>(null);
     const dragRef = useRef<DragStart | null>(null);
     const labelRef = useRef<Konva.Text>(null);
+    const dimensionsRef = useRef<Konva.Group>(null);
+    const dimensions = useMemo(() => (showDimensions ? shapeDimensions(shape) : []), [showDimensions, shape]);
 
     const points = useMemo(() => outlineCm.flatMap((p) => [p.x, p.y]), [outlineCm]);
 
@@ -114,8 +123,14 @@ export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef,
         }
     };
 
+    // Several rotated texts would each need their own counter transform: hide them instead.
+    const onTransformStart = () => dimensionsRef.current?.visible(false);
+
     // Back to this render's attrs; react-konva then applies only the props that change with the new plan.
-    const onTransformEnd = () => labelRef.current?.setAttrs(labelAttrs(labelPlacement));
+    const onTransformEnd = () => {
+        labelRef.current?.setAttrs(labelAttrs(labelPlacement));
+        dimensionsRef.current?.visible(true);
+    };
 
     const { style } = shape;
     const strokeProps = {
@@ -137,6 +152,7 @@ export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef,
             dragBoundFunc={dragBound}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            onTransformStart={onTransformStart}
             onTransform={onTransform}
             onTransformEnd={onTransformEnd}
             onMouseEnter={(e) => draggable && setCursor(e, MOVE_CURSOR)}
@@ -152,6 +168,21 @@ export function ShapeNode({ floorId, shape, outlineCm, scale, draggable, altRef,
                 </>
             ) : (
                 <Line points={points} closed fill={style.fill ?? NO_FILL} {...strokeProps} />
+            )}
+            {dimensions.length > 0 && (
+                <Group ref={dimensionsRef} listening={false}>
+                    {dimensions.map((label, i) => (
+                        <DimensionText
+                            key={i}
+                            text={label.text}
+                            centerCm={dimensionCenterCm(label, "inside", DIMENSION_GAP_PX / scale, DIMENSION_HEIGHT_PX / scale)}
+                            rotationDeg={readableRotationDeg(label.edgeAngleDeg, shape.rotationDeg)}
+                            lengthCm={label.lengthCm}
+                            scale={scale}
+                            color={style.stroke}
+                        />
+                    ))}
+                </Group>
             )}
             {shape.label && <ShapeLabel ref={labelRef} text={shape.label} color={style.stroke} {...labelPlacement} />}
         </Group>

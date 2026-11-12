@@ -26,7 +26,7 @@ import { loadPlan, savePlan, type LoadOutcome } from "@/lib/plan-storage";
 import { createShape, type InsertableKind } from "@/lib/shape-factory";
 import { canDeleteRoom, isRoomPatchAllowed } from "@/lib/room-lock";
 import { canDelete, isPatchAllowed } from "@/lib/shape-lock";
-import { getBrowserStorage, PROPERTIES_PANEL_OPEN_KEY, readBoolean, writeBoolean } from "@/lib/ui-prefs";
+import { getBrowserStorage, PROPERTIES_PANEL_OPEN_KEY, readBoolean, SHOW_DIMENSIONS_KEY, writeBoolean } from "@/lib/ui-prefs";
 import { underlayWithImage, type ImageAvailability, type UnderlayImage } from "@/lib/underlay";
 import type { Viewport } from "@/lib/viewport";
 import * as history from "@/store/history";
@@ -130,6 +130,8 @@ export interface AppState {
     /** Session-only view per floor; a missing entry means "fit on next display". */
     viewports: Partial<Record<string, Viewport>>;
     propertiesPanelOpen: boolean;
+    /** Dimensions of rooms and shapes on the canvas; a browser preference, not part of the plan or its history. */
+    showDimensions: boolean;
     /** `null` = calibration mode off. */
     calibrationDraft: CalibrationDraft | null;
     /** Session-only, starts as "select". */
@@ -157,6 +159,7 @@ export interface AppState {
     setActiveFloor: (id: FloorId) => void;
     setViewport: (id: FloorId, vp: Viewport) => void;
     togglePropertiesPanel: () => void;
+    toggleDimensions: () => void;
 
     /**
      * Shape actions return `false` and leave `plan` unchanged when the change is
@@ -399,6 +402,7 @@ export function createAppStore(
                     saveStatus: initialSaveStatus,
                     viewports: {},
                     propertiesPanelOpen: readBoolean(storage, PROPERTIES_PANEL_OPEN_KEY, true),
+                    showDimensions: readBoolean(storage, SHOW_DIMENSIONS_KEY, false),
                     calibrationDraft: null,
                     activeTool: "select",
                     selectedShapeId: null,
@@ -423,6 +427,11 @@ export function createAppStore(
                         const open = !get().propertiesPanelOpen;
                         writeBoolean(storage, PROPERTIES_PANEL_OPEN_KEY, open);
                         set({ propertiesPanelOpen: open });
+                    },
+                    toggleDimensions: () => {
+                        const show = !get().showDimensions;
+                        writeBoolean(storage, SHOW_DIMENSIONS_KEY, show);
+                        set({ showDimensions: show });
                     },
 
                     addShape: (floorId, shape) => applyPlan((p) => planOps.addShape(p, floorId, shape, now())),

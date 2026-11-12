@@ -1,9 +1,12 @@
 import type Konva from "konva";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Group, Layer, Line } from "react-konva";
+import { DIMENSION_GAP_PX, DIMENSION_HEIGHT_PX, dimensionWidthPx } from "@/components/canvas/dimension-measure";
+import { DimensionText } from "@/components/canvas/DimensionText";
 import { OpeningsLayer, type OpeningDrag, type SnapMark } from "@/components/canvas/OpeningsLayer";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
 import { useAltKeyRef, useCtrlKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
+import { placeRoomDimensions, readableRotationDeg, type PlacedDimension } from "@/lib/dimensions";
 import { edgeFrame, openingGap } from "@/lib/opening-geometry";
 import type { FloorId, PointCm, Room } from "@/lib/plan-schema";
 import { roomAreaFill } from "@/lib/room-colors";
@@ -44,7 +47,8 @@ interface RoomsLayerProps {
  *   (`openingGap`, 40 cm or the edge's wall thickness outwards) out of all bands
  *   the same way, so the underlay stays visible in it and no background-colored
  *   area is laid over it.
- * - Areas: half-transparent white insides as click targets, the names in
+ * - Areas: half-transparent white insides as click targets, the edges'
+ *   dimensions (`placeRoomDimensions`, once per floor and zoom) and the names in
  *   fixed screen size, the blue outline of the selected room with its
  *   highlighted edge, and on top the door and window symbols (`OpeningsLayer`).
  *
@@ -76,6 +80,19 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
         [setRoomDrag, floorId],
     );
     const [openingDrag, setOpeningDrag] = useState<OpeningDrag | null>(null);
+    const showDimensions = useAppStore((s) => s.showDimensions);
+    // Whether a dimension fits outside depends on the text's size in cm, so on the zoom.
+    const dimensions = useMemo(
+        () =>
+            showDimensions
+                ? placeRoomDimensions(
+                      rooms,
+                      (text) => ({ widthCm: dimensionWidthPx(text) / scale, heightCm: DIMENSION_HEIGHT_PX / scale }),
+                      DIMENSION_GAP_PX / scale,
+                  )
+                : null,
+        [showDimensions, rooms, scale],
+    );
 
     const offsetOf = (id: string) => (drag?.id === id ? drag : { dx: 0, dy: 0 });
     // Bands and insides follow a room being dragged.
@@ -132,13 +149,14 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
                 ))}
             </Layer>
             <Layer>
-                {rooms.map((room) => (
+                {rooms.map((room, i) => (
                     <RoomArea
                         key={room.id}
                         floorId={floorId}
                         room={room}
                         rooms={rooms}
                         scale={scale}
+                        dimensions={dimensions?.[i]}
                         draggable={selecting && room.id === selected?.id && !room.locked}
                         altRef={altRef}
                         ctrlRef={ctrlRef}
@@ -199,6 +217,8 @@ interface RoomAreaProps {
     /** All rooms of the floor; the others are the walls the room sticks to. */
     rooms: readonly Room[];
     scale: number;
+    /** Placed dimensions of the room's edges; `undefined` while the dimensions are hidden. */
+    dimensions: readonly PlacedDimension[] | undefined;
     draggable: boolean;
     altRef: RefObject<boolean>;
     /** Ctrl held: no sticking to walls. */
@@ -219,14 +239,15 @@ interface DragStart {
 const stickKey = (sticks: readonly WallStick[]) => sticks.map((s) => `${s.roomId}:${s.edgeIndex}`).join("|");
 
 /**
- * One room's area and name; the group sits at (0, 0) because the corners are
- * absolute. Not draggable while locked, so a drag on it moves the stage.
+ * One room's area, its dimensions (with the display on; placed by
+ * `RoomsLayer`, they move with the dragged group) and its name; the group sits
+ * at (0, 0) because the corners are absolute. Not draggable while locked, so a drag on it moves the stage.
  * While dragged, the offset follows the grid; across a wall of another room it
  * sticks (`snapRoomDrag`): captured within 8 screen px, torn off beyond 24 px,
  * corners flush along the wall. The sticks live in `dragRef` between pointer
  * moves. With Ctrl held only the grid applies and all sticks are dropped.
  */
-function RoomArea({ floorId, room, rooms, scale, draggable, altRef, ctrlRef, onDrag }: RoomAreaProps) {
+function RoomArea({ floorId, room, rooms, scale, dimensions, draggable, altRef, ctrlRef, onDrag }: RoomAreaProps) {
     const moveRoom = useAppStore((s) => s.moveRoom);
     const settings = useAppStore(selectSettings);
     const groupRef = useRef<Konva.Group>(null);
@@ -313,6 +334,17 @@ function RoomArea({ floorId, room, rooms, scale, draggable, altRef, ctrlRef, onD
             onMouseLeave={(e) => setCursor(e, "")}
         >
             <Line points={points} closed fill={roomAreaFill(room.color)} perfectDrawEnabled={false} />
+            {dimensions?.map(({ label, centerCm }, i) => (
+                <DimensionText
+                    key={i}
+                    text={label.text}
+                    centerCm={centerCm}
+                    rotationDeg={readableRotationDeg(label.edgeAngleDeg, 0)}
+                    lengthCm={label.lengthCm}
+                    scale={scale}
+                    color={ROOM_LABEL_COLOR}
+                />
+            ))}
             <ShapeLabel text={room.name} color={ROOM_LABEL_COLOR} anchorCm={labelCm} scale={scale} rotationDeg={0} />
         </Group>
     );
