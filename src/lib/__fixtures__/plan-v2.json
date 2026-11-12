@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 2,
+  "name": "Umzug Musterhaus",
+  "createdAt": "2026-10-02T08:15:00.000Z",
+  "updatedAt": "2026-11-10T19:42:31.250Z",
+  "floors": [
+    {
+      "id": "5b0e1c7a-3f2d-4c8e-9a41-7d6e2b9f0c13",
+      "name": "Keller"
+    },
+    {
+      "id": "eg",
+      "name": "Erdgeschoss"
+    },
+    {
+      "id": "og",
+      "name": "Obergeschoss"
+    },
+    {
+      "id": "dg",
+      "name": "Dachgeschoss"
+    }
+  ],
+  "activeFloorId": "og",
+  "calibrationByFloor": {
+    "eg": {
+      "p1": {
+        "x": 120,
+        "y": 160.4
+      },
+      "p2": {
+        "x": 1118.6,
+        "y": 160.4
+      },
+      "realLengthCm": 1000,
+      "pxPerCm": 0.9986
+    },
+    "og": {
+      "p1": {
+        "x": 100,
+        "y": 100
+      },
+      "p2": {
+        "x": 848,
+        "y": 100
+      },
+      "realLengthCm": 1000,
+      "pxPerCm": 0.748
+    }
+  },
+  "shapesByFloor": {
+    "5b0e1c7a-3f2d-4c8e-9a41-7d6e2b9f0c13": [
+      {
+        "id": "e1f4a2b8-6c3d-4f7e-8a9b-0c1d2e3f4a5b",
+        "kind": "rect",
+        "x": 200,
+        "y": 150,
+        "rotationDeg": 0,
+        "mirrored": false,
+        "label": "Regal",
+        "style": {
+          "fill": "#E4E4E7",
+          "stroke": "#18181B",
+          "strokeWidth": 1,
+          "opacity": 1
+        },
+        "widthCm": 180,
+        "depthCm": 40,
+        "cornerRadiusCm": 0
+      }
+    ],
+    "eg": [
+      {
+        "id": "dea9f73d-8fdc-4d96-907a-617dd0b4c838",
+        "kind": "rect",
+        "x": 250,
+        "y": 120,
+        "rotationDeg": 0,
+        "mirrored": false,
+        "label": "Sofa",
+        "style": {
+          "fill": "#E4E4E7",
+          "stroke": "#18181B",
+          "strokeWidth": 1,
+          "opacity": 1
+        },
+        "widthCm": 220,
+        "depthCm": 95,
+        "cornerRadiusCm": 10
+      },
+      {
+        "id": "b210fc0f-1cda-4d4f-84fa-69f2ecfb5466",
+        "kind": "ellipse",
+        "x": 480,
+        "y": 300,
+        "rotationDeg": 0,
+        "mirrored": false,
+        "label": "Esstisch",
+        "style": {
+          "fill": null,
+          "stroke": "#18181B",
+          "strokeWidth": 1.5,
+          "opacity": 1
+        },
+        "widthCm": 120,
+        "depthCm": 80
+      },
+      {
+        "id": "76f3405e-c3e1-4421-a677-640839a6e12d",
+        "kind": "u-shape",
+        "x": 700,
+        "y": 150,
+        "rotationDeg": 180,
+        "mirrored": false,
+        "label": "U-Küche",
+        "style": {
+          "fill": "#D4E4F7",
+          "stroke": "#18181B",
+          "strokeWidth": 1,
+          "opacity": 0.8
+        },
+        "widthCm": 300,
+        "depthCm": 250,
+        "baseWidthCm": 60,
+        "sideWidthCm": 60
+      },
+      {
+        "id": "c7e8da44-3bcf-49d9-b462-d80ca364cc64",
+        "kind": "door-swing",
+        "x": 90,
+        "y": 420,
+        "rotationDeg": 90,
+        "mirrored": true,
+        "style": {
+          "fill": null,
+          "stroke": "#71717A",
+          "strokeWidth": 1,
+          "opacity": 1
+        },
+        "widthCm": 88.5,
+        "locked": true
+      }
+    ],
+    "og": [
+      {
+        "id": "a45a9797-97e5-4ade-a63e-189722db61ad",
+        "kind": "l-shape",
+        "x": 320,
+        "y": 260,
+        "rotationDeg": 0,
+        "mirrored": true,
+        "label": "Ecksofa",
+        "style": {
+          "fill": "#E4E4E7",
+          "stroke": "#18181B",
+          "strokeWidth": 1,
+          "opacity": 1
+        },
+        "widthCm": 280,
+        "depthCm": 200,
+        "legAWidthCm": 90,
+        "legBWidthCm": 90
+      },
+      {
+        "id": "2f97423d-c761-4f6e-afb2-28782804c8db",
+        "kind": "corner",
+        "x": 610,
+        "y": 90,
+        "rotationDeg": 270,
+        "mirrored": false,
+        "label": "Eckdusche",
+        "style": {
+          "fill": "#E0F2F1",
+          "stroke": "#18181B",
+          "strokeWidth": 1,
+          "opacity": 1
+        },
+        "widthCm": 90,
+        "depthCm": 90
+      },
+      {
+        "id": "d59d7055-ecf3-4cf5-acaa-c432045aa5ff",
+        "kind": "polygon",
+        "x": 450,
+        "y": 480,
+        "rotationDeg": 12.5,
+        "mirrored": false,
+        "style": {
+          "fill": "#F5E6C8",
+          "stroke": "#18181B",
+          "strokeWidth": 2,
+          "opacity": 0.6
+        },
+        "pointsCm": [
+          {
+            "x": -100,
+            "y": -60
+          },
+          {
+            "x": 100,
+            "y": -60
+          },
+          {
+            "x": 120,
+            "y": 60
+          },
+          {
+            "x": -80,
+            "y": 60
+          }
+        ]
+      }
+    ],
+    "dg": []
+  }
+}

@@ -1,0 +1,148 @@
+schema: spec-driven
+
+context: |
+    Projekt: Raumplaner – persönliche, maßgeschneiderte Web-App zur Einzugs- und
+    Raumplanung für genau ein Haus. Kein Produkt für andere Nutzer.
+    Etagen und Grundrisse sind Nutzerdaten: Der Nutzer legt Etagen an und
+    zeichnet je Etage die Räume mit ihren Innenmaßen in cm nach. Ein
+    eingescannter Grundriss kann optional als ausblendbare Vorlage darunter
+    liegen.
+    Möbel als Formen mit exakten Maßen platzieren, verschieben, drehen,
+    beschriften, einfärben, als Datei exportieren/importieren.
+    Einzelnutzer, Desktop-Browser (Chrome/Firefox/Edge).
+
+    Rahmen:
+    - Läuft komplett im Browser. Kein Backend, keine Datenbank, keine Cloud,
+      keine Accounts, keine Netzwerkaufrufe zur Laufzeit.
+    - Persistenz: Der aktuelle Plan (Etagen, Räume, Möbel, Vorlagen-Angaben)
+      wird automatisch im localStorage des Browsers gespeichert und beim Start
+      wiederhergestellt. Vorlagenbilder liegen wegen ihrer Größe nicht im
+      localStorage, sondern in IndexedDB; der Plan verweist nur auf sie.
+    - Oberfläche auf Deutsch. Code, Bezeichner und Commits auf Englisch.
+    - Bewusst einfach: Räume statt Wände (Wanddicke je Raumkante, aber keine
+      eigenen Wandobjekte und keine Wandverbindungen), keine 3D-Ansicht, kein
+      Mehrbenutzer-Betrieb.
+
+    Tech-Stack:
+    - Vite + React + TypeScript (strict)
+    - Zeichenfläche: Konva.js über react-konva (Transformer für Drehen/Größe)
+    - State: Zustand (ein zentraler Projekt-Store), Undo/Redo über zundo
+    - UI: Tailwind CSS + shadcn/ui
+    - Validierung: Zod (Import-Schema ist zugleich Quelle der TS-Typen)
+    - Vorlagenbilder: vom Nutzer hochgeladen (PNG/JPEG/WebP), in IndexedDB
+      gespeichert und als Konva-Image geladen. Keine Bilder im Repo.
+    - Tests: Vitest für Logik (Umrechnung, Geometrie, Kalibrierung, Import/Export)
+
+    Etagen (Nutzerdaten, Teil des Plans):
+    - Floor { id, name }; die Reihenfolge im Array plan.floors ist die
+      Reihenfolge im Etagen-Umschalter. Mindestens eine Etage.
+    - Anlegen, Umbenennen, Löschen und Sortieren über die Oberfläche.
+    - Aus Version 1 übernommene Etagen behalten die IDs eg, og, dg; neue
+      Etagen bekommen eine ID über crypto.randomUUID().
+
+    Koordinaten:
+    - Die cm-Welt ist das Original: Räume, Möbel und Ansicht arbeiten in cm.
+    - Eine Vorlage (Bild) wird über ihre Kalibrierung (Maßstab, optional
+      Ausrichtung waagerecht/senkrecht) in die cm-Welt gelegt. Ohne Drehung
+      liegt Bildpixel (0,0) bei (0 cm, 0 cm).
+
+    Kalibrierung (Nutzerdaten, Teil der Vorlage einer Etage):
+    - Calibration { p1, p2, realLengthCm, pxPerCm }; Kalibrierpunkte beziehen
+      sich auf die Originalpixel des Vorlagenbilds, pxPerCm = Bildpixel je cm.
+    - Nur nötig, wenn eine Etage eine Vorlage hat. Wird mit dem
+      Kalibrier-Werkzeug ermittelt und mit dem Plan gespeichert und
+      exportiert/importiert.
+
+    Datenmodell der Planung (verbindlich, wächst schrittweise über die
+    Changes floors-in-plan, floor-underlay, floor-rooms, room-openings,
+    wall-thickness, room-passage, room-color, app-settings, room-lock;
+    maßgeblich ist src/lib/plan-schema.ts):
+    - Plan { schemaVersion, name, createdAt, updatedAt, activeFloorId,
+      floors: Floor[],
+      underlayByFloor: Partial<Record<floorId, Underlay>>,
+      roomsByFloor: Record<floorId, Room[]>,
+      shapesByFloor: Record<floorId, Shape[]>,
+      settings: PlanSettings }
+    - PlanSettings { defaultWallThicknessCm, wallColor: "#RRGGBB",
+      defaultRoomColor: "#RRGGBB" | null, gridStepCm, snapStepCm,
+      fineSnapStepCm, doorWidthCm, windowWidthCm, passageWidthCm }:
+      Einstellungen des Plans (Standardwerte für neue Räume und Öffnungen,
+      Raster, Fangschritte, Wandfarbe), gespeichert und exportiert mit dem
+      Plan. Werkseinstellungen 15 cm, #3F3F46, null, 100 cm, 5 cm, 1 cm,
+      80/120/100 cm (FACTORY_SETTINGS in src/lib/plan-settings.ts).
+    - Room { id, name, pointsCm: {x,y}[] (absolut, geschlossen, Innenmaße),
+      openings: Opening[], wallThicknessCm: number[],
+      color: "#RRGGBB" | null, locked: boolean }; Opening = Tür,
+      Fenster oder Durchgang (offene Wand ohne Türblatt) auf einer
+      Raumkante, Tür optional mit Aufschlag.
+      wallThicknessCm hat einen Wert je Kante (Index = Kantenindex, > 0 und
+      ≤ 100 cm, neu: Wanddicke neuer Räume aus den Einstellungen). Die Wand wird als Band außen um den Raum
+      dargestellt, je Kante so breit wie ihre Wanddicke; eigene Wandobjekte
+      gibt es nicht.
+      color ist die Raumfarbe (null = „Standard“, halbtransparent weiß);
+      die Fläche wird in dieser Farbe halbtransparent gefüllt, neue Räume
+      bekommen die Farbe neuer Räume aus den Einstellungen.
+      locked sperrt den Raum (nicht verschiebbar, Kanten und Wanddicken
+      fest, nicht löschbar; Name, Farbe und Öffnungen bleiben änderbar);
+      neue Räume sind nicht gesperrt.
+    - Shape (gemeinsam) { id, kind, x, y, rotationDeg, mirrored, label?,
+      style { fill|null, stroke, strokeWidth, opacity }, locked? }
+      plus geometry je nach kind (diskriminierte Union über kind):
+      - rect        { widthCm, depthCm, cornerRadiusCm }  Schrank, Bett, Tisch,
+                                                           mit Radius: Sofa, Wanne
+      - ellipse     { widthCm, depthCm }                  runder/ovaler Tisch
+      - l-shape     { widthCm, depthCm, legAWidthCm, legBWidthCm }
+                                                           Ecksofa, Eckküche
+      - u-shape     { widthCm, depthCm, baseWidthCm, sideWidthCm }
+                                                           U-Küche, Wohnlandschaft
+      - corner      { widthCm, depthCm }  Viertelkreis in einem Rechteck,
+                                           z. B. Eckdusche, Eckregal
+      - door-swing  { widthCm }           Türblatt + Viertelkreis-Aufschlag
+      - polygon     { pointsCm: {x,y}[] } freie Form, Punkte relativ zum Mittelpunkt
+    - Alle Möbel- und Raummaße und Positionen in Zentimetern, nie in Pixeln.
+      Pixel gibt es nur im Vorlagenbild (Kalibrierpunkte).
+    - Position = Mittelpunkt des umschließenden Rechtecks; Drehung um diesen
+      Punkt. mirrored spiegelt horizontal (z. B. L-Form links/rechts).
+    - Jede Form liefert ihren Umriss über eine reine Funktion
+      getOutlineCm(shape) als Punktliste; Darstellung und Tests nutzen diese.
+    - fill: null bedeutet "nur Rand".
+    - IDs über crypto.randomUUID().
+    - Zeichenreihenfolge = Reihenfolge im Array shapesByFloor[floorId]:
+      das letzte Element liegt oben. Es gibt kein separates zIndex-Feld.
+      "Nach vorne/hinten" verschiebt die Form innerhalb des Arrays.
+    - Export: eine JSON-Datei mit dem Plan und den Vorlagenbildern der
+      Etagen als Base64-Data-URL, ohne Ansichtseinstellungen.
+    - schemaVersion beginnt bei 1 und wird bei jeder Änderung am
+      Datenformat um 1 erhöht.
+    - Import:
+      - Die Etagen kommen aus der Datei. Formen, Räume oder Vorlagen unter
+        einer Etage, die in der Datei nicht als Etage angelegt ist, werden
+        gemeldet, nicht stillschweigend verworfen.
+      - Weicht die schemaVersion ab (älter oder neuer), erscheint ein Hinweis;
+        der Nutzer entscheidet: trotzdem importieren oder abbrechen.
+      - "Trotzdem importieren" versucht eine automatische Migration. Formen,
+        die sich nicht übernehmen lassen, werden aufgelistet, nie
+        stillschweigend verworfen.
+      - Vor dem Ersetzen des aktuellen Plans wird nachgefragt.
+
+    Architektur:
+    - Reine Logik (Umrechnung, Geometrie, Serialisierung) in src/lib/,
+      ohne React- oder Konva-Abhängigkeit, damit sie testbar ist.
+    - Konva-Komponenten lesen aus dem Store und schreiben nur über Store-Aktionen.
+    - Neue Formtypen werden nur über einen Eintrag in der kind-Union, eine
+      getOutlineCm-Implementierung und ein Eigenschaften-Formular ergänzt.
+    - Keine zusätzlichen Abhängigkeiten ohne Begründung im design.md.
+
+rules:
+    proposal:
+        - Halte jede Änderung klein genug für eine Arbeitssitzung; größere aufteilen.
+        - Nenne ausdrücklich, was nicht zum Umfang gehört.
+    specs:
+        - Anforderungen und Szenarien auf Deutsch, die OpenSpec-Überschriften
+          (Requirement, Scenario) und Schlüsselwörter (SHALL, MUST) unverändert lassen.
+        - Maßangaben in Szenarien immer mit Einheit (cm).
+    design:
+        - Beschreibe Auswirkungen auf das Datenmodell und auf schemaVersion.
+    tasks:
+        - Jede Logik-Funktion in src/lib/ bekommt einen Vitest-Test.
+        - "Letzte Aufgabe: npm run build und npm test laufen fehlerfrei."
