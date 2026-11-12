@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 
-type ModifierKey = "altKey" | "shiftKey";
+type ModifierKey = "altKey" | "shiftKey" | "ctrlKey";
 
 /**
  * Whether a modifier key is currently held, kept in a ref for Konva callbacks
@@ -37,4 +37,9 @@ export function useAltKeyRef(): RefObject<boolean> {
 /** Shift held: no snap points for openings. */
 export function useShiftKeyRef(): RefObject<boolean> {
     return useModifierKeyRef("shiftKey");
+}
+
+/** Ctrl held: a dragged room does not stick to walls. */
+export function useCtrlKeyRef(): RefObject<boolean> {
+    return useModifierKeyRef("ctrlKey");
 }
