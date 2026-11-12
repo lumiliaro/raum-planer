@@ -102,7 +102,13 @@ export function PlanFileActions() {
                 <Upload strokeWidth={1.75} aria-hidden="true" />
                 Importieren
             </Button>
-            <Button variant="outline" size="sm" className="text-[13px]" onClick={openExport}>
+            <Button
+                variant="outline"
+                size="sm"
+                className="text-[13px]"
+                data-tutorial="export"
+                onClick={openExport}
+            >
                 <Download strokeWidth={1.75} aria-hidden="true" />
                 Exportieren
             </Button>

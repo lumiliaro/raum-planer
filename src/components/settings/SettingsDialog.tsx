@@ -26,14 +26,15 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
             <DialogContent showCloseButton={false} className="gap-0 p-0 text-[13px] sm:max-w-[440px]">
-                <SettingsForm />
+                <SettingsForm onClose={onClose} />
             </DialogContent>
         </Dialog>
     );
 }
 
-function SettingsForm() {
+function SettingsForm({ onClose }: { onClose: () => void }) {
     const settings = useAppStore(selectSettings);
+    const startTutorial = useAppStore((s) => s.startTutorial);
     const updateSettings = useAppStore((s) => s.updateSettings);
     const resetSettings = useAppStore((s) => s.resetSettings);
     /** Esc in a field with typed text only resets the field; the next Esc closes the dialog. */
@@ -92,12 +93,26 @@ function SettingsForm() {
                         {numberField("fineSnapStepCm")}
                     </div>
                 </SettingsSection>
-                <SettingsSection title="Öffnungen" last>
+                <SettingsSection title="Öffnungen">
                     <div className="grid grid-cols-3 gap-x-2 gap-y-3">
                         {numberField("doorWidthCm")}
                         {numberField("windowWidthCm")}
                         {numberField("passageWidthCm")}
                     </div>
+                </SettingsSection>
+                {/* An action, not a plan setting: untouched by „Auf Werkseinstellungen zurücksetzen“. */}
+                <SettingsSection title="Tutorial" last>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="self-start text-[13px]"
+                        onClick={() => {
+                            onClose();
+                            startTutorial();
+                        }}
+                    >
+                        Tutorial neu starten
+                    </Button>
                 </SettingsSection>
             </div>
             <DialogFooter className="flex-row items-center justify-between border-t px-5 py-4 sm:justify-between">

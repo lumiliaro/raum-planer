@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readBoolean, writeBoolean } from "@/lib/ui-prefs";
+import type { LoadOutcome } from "@/lib/plan-storage";
+import { readBoolean, shouldAutoStartTutorial, writeBoolean } from "@/lib/ui-prefs";
 import { memoryStorage, throwingStorage } from "@/test/memory-storage";
 
 const KEY = "raumplaner.ui.test";
@@ -38,5 +39,14 @@ describe("writeBoolean", () => {
     it("does not throw when the storage throws or is missing", () => {
         expect(() => writeBoolean(throwingStorage(), KEY, true)).not.toThrow();
         expect(() => writeBoolean(undefined, KEY, true)).not.toThrow();
+    });
+});
+
+describe("shouldAutoStartTutorial", () => {
+    const outcomes: LoadOutcome[] = ["unavailable", "empty", "restored", "migrated", "backed-up", "backup-failed"];
+
+    it.each(outcomes)("for %s starts only when empty and not seen", (outcome) => {
+        expect(shouldAutoStartTutorial(outcome, false)).toBe(outcome === "empty");
+        expect(shouldAutoStartTutorial(outcome, true)).toBe(false);
     });
 });

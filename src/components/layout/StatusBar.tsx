@@ -41,6 +41,7 @@ export function StatusBar() {
             <UnderlayStatusText />
             <button
                 type="button"
+                data-tutorial="save-status"
                 title={reason ?? SAVED_TOOLTIP}
                 onClick={() => openHelp("privacy")}
                 className={cn(

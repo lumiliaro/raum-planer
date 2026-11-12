@@ -50,6 +50,7 @@ export function HeaderBar() {
                 <button
                     type="button"
                     aria-label="Hilfe und Tastenkürzel (?)"
+                    data-tutorial="help"
                     title="Hilfe und Tastenkürzel (?)"
                     onClick={() => openHelp("shortcuts")}
                     className={ICON_BUTTON_CLASS}

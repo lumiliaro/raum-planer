@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { toolForKey } from "@/components/layout/tools";
+import { TUTORIAL_STEPS } from "@/components/tutorial/tutorial-steps";
 import { addOpening, addRoom, addShape, createEmptyPlan, setActiveFloor, setCalibration } from "@/lib/plan";
 import planV1Text from "@/lib/__fixtures__/plan-v1.json?raw";
 import planV2Text from "@/lib/__fixtures__/plan-v2.json?raw";
@@ -41,6 +42,7 @@ import {
 const PANEL_KEY = "raumplaner.ui.propertiesPanelOpen";
 const DIMENSIONS_KEY = "raumplaner.ui.showDimensions";
 const SNAPPING_KEY = "raumplaner.ui.shapeSnapping";
+const TUTORIAL_KEY = "raumplaner.ui.tutorialSeen";
 const CREATED = new Date("2026-11-01T10:00:00.000Z");
 const NOW = new Date("2026-11-11T18:30:00.000Z");
 const now = () => NOW;
@@ -234,6 +236,79 @@ describe("app store", () => {
             store.getState().openHelp("shortcuts");
             store.getState().openHelp("privacy");
             store.getState().closeHelp();
+            expect(store.getState().plan).toBe(plan);
+            expect(store.temporal.getState().pastStates.length).toBe(steps);
+            // Undo takes back the width change.
+            store.getState().undo();
+            expect(store.getState().plan.shapesByFloor.eg[0]).toMatchObject({ widthCm: 200 });
+        });
+    });
+
+    describe("tutorial", () => {
+        const LAST = TUTORIAL_STEPS.length - 1;
+
+        it("starts on its own only when nothing was stored and it was never seen", () => {
+            expect(createAppStore(memoryStorage(), { now, newId }).getState().tutorialStep).toBe(0);
+            expect(createAppStore(memoryStorage({ [TUTORIAL_KEY]: "true" }), { now, newId }).getState().tutorialStep).toBeNull();
+            expect(createAppStore(storedPlan()).getState().tutorialStep).toBeNull();
+            expect(createAppStore(throwingStorage(), { newId }).getState().tutorialStep).toBeNull();
+            expect(createAppStore(undefined, { newId }).getState().tutorialStep).toBeNull();
+        });
+
+        it("next and prev stay within the steps", () => {
+            const store = createAppStore(memoryStorage(), { now, newId });
+            store.getState().prevTutorialStep();
+            expect(store.getState().tutorialStep).toBe(0);
+            store.getState().nextTutorialStep();
+            store.getState().nextTutorialStep();
+            store.getState().nextTutorialStep();
+            store.getState().prevTutorialStep();
+            store.getState().prevTutorialStep();
+            expect(store.getState().tutorialStep).toBe(1);
+            for (let i = 0; i < TUTORIAL_STEPS.length + 2; i++) store.getState().nextTutorialStep();
+            expect(store.getState().tutorialStep).toBe(LAST);
+        });
+
+        it("next and prev do nothing while the tutorial is off", () => {
+            const store = createAppStore(storedPlan());
+            store.getState().nextTutorialStep();
+            store.getState().prevTutorialStep();
+            expect(store.getState().tutorialStep).toBeNull();
+        });
+
+        it("ending writes the key, so a new store does not start it again", () => {
+            const storage = memoryStorage();
+            const store = createAppStore(storage, { now, newId });
+            store.getState().nextTutorialStep();
+            store.getState().endTutorial();
+            expect(store.getState().tutorialStep).toBeNull();
+            expect(storage.getItem(TUTORIAL_KEY)).toBe("true");
+            expect(createAppStore(storage, { now, newId }).getState().tutorialStep).toBeNull();
+        });
+
+        it("starts at step 1 again after it was ended", () => {
+            const store = createAppStore(memoryStorage({ [TUTORIAL_KEY]: "true" }), { now, newId });
+            store.getState().startTutorial();
+            expect(store.getState().tutorialStep).toBe(0);
+        });
+
+        it("ending still works when the storage throws", () => {
+            const store = createAppStore(throwingStorage(), { newId });
+            store.getState().startTutorial();
+            expect(() => store.getState().endTutorial()).not.toThrow();
+            expect(store.getState().tutorialStep).toBeNull();
+        });
+
+        it("start, next and end change neither the plan nor the history", () => {
+            const store = createAppStore(storedPlan((p) => addShape(p, "eg", rect(1), CREATED)), { now });
+            store.getState().updateShape("eg", uuid(1), { widthCm: 120 });
+            const plan = store.getState().plan;
+            const steps = store.temporal.getState().pastStates.length;
+            store.getState().startTutorial();
+            store.getState().nextTutorialStep();
+            store.getState().nextTutorialStep();
+            store.getState().prevTutorialStep();
+            store.getState().endTutorial();
             expect(store.getState().plan).toBe(plan);
             expect(store.temporal.getState().pastStates.length).toBe(steps);
             // Undo takes back the width change.
