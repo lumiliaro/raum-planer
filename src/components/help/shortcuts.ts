@@ -34,6 +34,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     {
         title: "Auswahl",
         entries: [
+            { keys: ["Strg+C"], description: "Kopieren" },
+            { keys: ["Strg+X"], description: "Ausschneiden" },
+            { keys: ["Strg+V"], description: "Einfügen" },
+            { keys: ["Strg+D"], description: "Duplizieren" },
             { keys: ["Entf", "Rücktaste"], description: "Löschen" },
             { keys: ["Bild↑"], description: "Eine Ebene nach vorne" },
             { keys: ["Bild↓"], description: "Eine Ebene nach hinten" },
