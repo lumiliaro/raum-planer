@@ -31,17 +31,24 @@ Ein neuer Plan SHALL die Werkseinstellungen haben: Wanddicke neuer Räume 15 cm,
 - **THEN** ist die neue Tür 88,5 cm breit
 
 ### Requirement: Dialog „Einstellungen“
-Die Schaltfläche „Einstellungen“ in der Kopfleiste SHALL den Dialog „Einstellungen“ öffnen. Er MUST die Abschnitte „Wände“, „Räume“, „Raster und Fangen“ und „Öffnungen“ mit je einem Feld pro Einstellung, Zahlen mit Einheit cm, und unten „Auf Werkseinstellungen zurücksetzen“ und „Schließen“ zeigen. Esc und „Schließen“ SHALL ihn schließen; bereits übernommene Werte bleiben dabei erhalten.
+Die Schaltfläche „Einstellungen“ in der Kopfleiste SHALL den Dialog „Einstellungen“ öffnen. Er MUST die Abschnitte „Wände“, „Räume“, „Raster und Fangen“ und „Öffnungen“ mit je einem Feld pro Einstellung, Zahlen mit Einheit cm, darunter den Abschnitt „Tutorial“ mit der Schaltfläche „Tutorial neu starten“ (siehe app-tutorial) und unten „Auf Werkseinstellungen zurücksetzen“ und „Schließen“ zeigen. Esc und „Schließen“ SHALL ihn schließen; bereits übernommene Werte bleiben dabei erhalten. „Tutorial neu starten“ MUST NOT die Einstellungen des Plans ändern, und „Auf Werkseinstellungen zurücksetzen“ MUST NOT das Tutorial betreffen.
 
 #### Scenario: Dialog öffnen
 - **WHEN** der Nutzer in der Kopfleiste auf „Einstellungen“ klickt
-- **THEN** öffnet sich der Dialog „Einstellungen“ mit den Abschnitten „Wände“, „Räume“, „Raster und Fangen“ und „Öffnungen“
+- **THEN** öffnet sich der Dialog „Einstellungen“ mit den Abschnitten „Wände“, „Räume“, „Raster und Fangen“, „Öffnungen“ und „Tutorial“
 - **AND** der Abschnitt „Wände“ zeigt „Wanddicke neuer Räume“ und „Wandfarbe“
+- **AND** der Abschnitt „Tutorial“ zeigt „Tutorial neu starten“
 
 #### Scenario: Schließen behält Werte
 - **GIVEN** der Nutzer hat im Dialog die Wanddicke neuer Räume auf 11,5 cm geändert und Enter gedrückt
 - **WHEN** er Esc drückt
 - **THEN** ist der Dialog geschlossen und die Wanddicke neuer Räume ist 11,5 cm
+
+#### Scenario: Neustart ändert keine Einstellung
+- **GIVEN** die Wanddicke neuer Räume ist 11,5 cm
+- **WHEN** der Nutzer auf „Tutorial neu starten“ klickt
+- **THEN** ist die Wanddicke neuer Räume weiter 11,5 cm
+- **AND** „Auf Werkseinstellungen zurücksetzen“ ist weiter möglich
 
 ### Requirement: Einstellung ändern
 Ein Zahlenfeld im Dialog SHALL wie im Eigenschaften-Panel mit Enter oder beim Verlassen übernommen werden, Komma oder Punkt annehmen und auf 0,1 cm runden. Ein Wert außerhalb seiner Grenzen MUST abgelehnt werden; das Feld zeigt dann die Grenze, z. B. „Muss zwischen 10 cm und 1 000 cm liegen“, und die Einstellung bleibt. Farben SHALL wie im Raum-Panel über Farbfelder bzw. Farbwähler sofort gesetzt werden.
