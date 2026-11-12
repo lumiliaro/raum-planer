@@ -10,6 +10,7 @@ import {
     pageScale,
     pageSizeMm,
     paperMm,
+    pdfFailureHint,
     pdfFileName,
     pdfIssues,
     printContentBounds,
@@ -298,5 +299,19 @@ describe("file name and date", () => {
     it("formats the print date as DD.MM.YYYY", () => {
         expect(formatPrintDate(date)).toBe("12.11.2026");
         expect(formatPrintDate(new Date(2027, 0, 5))).toBe("05.01.2027");
+    });
+});
+
+describe("failure hint", () => {
+    it("tells the user to reload when the PDF code cannot be loaded", () => {
+        expect(pdfFailureHint("load")).toBe("PDF-Funktion konnte nicht geladen werden – bitte Seite neu laden");
+    });
+
+    it("reports a failure while creating the PDF", () => {
+        expect(pdfFailureHint("create")).toBe("PDF konnte nicht erstellt werden");
+    });
+
+    it("has no hint without a failure", () => {
+        expect(pdfFailureHint(null)).toBeNull();
     });
 });

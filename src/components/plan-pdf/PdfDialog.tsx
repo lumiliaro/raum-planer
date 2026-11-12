@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import {
     defaultPdfOptions,
+    pdfFailureHint,
     pdfFileName,
     pdfIssues,
+    type PdfFailure,
     type PdfOptions,
     type PdfOrientation,
     type PdfScaleChoice,
@@ -17,7 +19,6 @@ import { loadImage } from "@/storage/image-cache";
 import { useAppStore } from "@/store/app-store";
 
 const NO_FLOOR_HINT = "Bitte mindestens eine Etage auswählen";
-const FAILED_HINT = "PDF konnte nicht erstellt werden";
 
 const ORIENTATIONS: { value: PdfOrientation; label: string }[] = [
     { value: "portrait", label: "Hochformat" },
@@ -89,7 +90,7 @@ interface PdfFormProps {
 function PdfForm({ creating, setCreating, onDone }: PdfFormProps) {
     const plan = useAppStore((s) => s.plan);
     const [options, setOptions] = useState<PdfOptions>(() => defaultPdfOptions(plan));
-    const [failed, setFailed] = useState(false);
+    const [failure, setFailure] = useState<PdfFailure | null>(null);
     const availableImages = useAvailableImages(plan);
     const issues = useMemo(() => pdfIssues(plan, options, availableImages), [plan, options, availableImages]);
     const blocked = issues.noFloor || issues.tooLarge.length > 0;
@@ -97,7 +98,7 @@ function PdfForm({ creating, setCreating, onDone }: PdfFormProps) {
 
     const change = (patch: Partial<PdfOptions>) => {
         setOptions((current) => ({ ...current, ...patch }));
-        setFailed(false);
+        setFailure(null);
     };
 
     const toggleFloor = (id: string, checked: boolean) =>
@@ -109,29 +110,43 @@ function PdfForm({ creating, setCreating, onDone }: PdfFormProps) {
         event.preventDefault();
         if (blocked || creating) return;
         setCreating(true);
-        setFailed(false);
-        try {
-            const now = new Date();
-            // Loaded on demand: `jspdf` stays out of the main bundle.
-            const { createPdf } = await import("@/components/plan-pdf/create-pdf");
-            const blob = await createPdf(plan, options, availableImages, now);
-            downloadBlob(pdfFileName(plan.name, now), blob);
-            setCreating(false);
-            onDone();
-        } catch (error) {
+        setFailure(null);
+        const fail = (kind: PdfFailure, error: unknown) => {
             console.error(error);
             setCreating(false);
-            setFailed(true);
+            setFailure(kind);
+        };
+
+        // Phase „load“: loaded on demand, `jspdf` stays out of the main bundle.
+        // Fails e.g. when a new version was deployed and the old chunks are gone.
+        let pdf: typeof import("@/components/plan-pdf/create-pdf");
+        let jsPDF: Awaited<ReturnType<typeof pdf.loadPdfLibrary>>;
+        try {
+            pdf = await import("@/components/plan-pdf/create-pdf");
+            jsPDF = await pdf.loadPdfLibrary();
+        } catch (error) {
+            fail("load", error);
+            return;
         }
+
+        // Phase „create“.
+        try {
+            const now = new Date();
+            const blob = await pdf.createPdf(jsPDF, plan, options, availableImages, now);
+            downloadBlob(pdfFileName(plan.name, now), blob);
+        } catch (error) {
+            fail("create", error);
+            return;
+        }
+        setCreating(false);
+        onDone();
     };
 
     const hint = issues.noFloor
         ? NO_FLOOR_HINT
         : issues.tooLarge.length > 0
           ? `Passt nicht auf die Seite: ${issues.tooLarge.join(", ")}`
-          : failed
-            ? FAILED_HINT
-            : null;
+          : pdfFailureHint(failure);
 
     return (
         <form onSubmit={(e) => void submit(e)} noValidate>

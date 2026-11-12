@@ -3,7 +3,9 @@
  * of the plan's floors. Header and footer are vector text and lines from
  * `jspdf`, the floor itself an image of the drawing area (`renderFloor`) at
  * its exact size in mm, so the scale on paper is exact. `jspdf` is loaded
- * only here, on demand, and does no network requests.
+ * on demand via `loadPdfLibrary` and does no network requests; the caller
+ * loads it first and passes it to `createPdf`, so a failed load can be told
+ * apart from a failure while creating the PDF.
  */
 
 import { floorDrawing, renderFloor } from "@/components/plan-pdf/render-floor";
@@ -27,6 +29,7 @@ import type { ImageId, Plan } from "@/lib/plan-schema";
 import { loadImage } from "@/storage/image-cache";
 
 type JsPdf = import("jspdf").jsPDF;
+type JsPdfConstructor = typeof import("jspdf").jsPDF;
 
 const TEXT_COLOR = "#18181B";
 const MUTED_COLOR = "#71717A";
@@ -40,17 +43,24 @@ const BAR_OFFSET_MM = 35;
 const BAR_LINE_MM = 0.2;
 const EMPTY_FLOOR_TEXT = "Keine Räume auf dieser Etage";
 
+/** Loads `jspdf` on demand (kept out of the main bundle); rejects if its code cannot be fetched. */
+export async function loadPdfLibrary(): Promise<JsPdfConstructor> {
+    const { jsPDF } = await import("jspdf");
+    return jsPDF;
+}
+
 /**
- * The PDF of `plan` with `options` as Blob. `availableImages` = underlay
- * images found in the browser when the dialog opened; `now` = print date.
+ * The PDF of `plan` with `options` as Blob, built with `jsPDF` from
+ * `loadPdfLibrary`. `availableImages` = underlay images found in the browser
+ * when the dialog opened; `now` = print date.
  */
 export async function createPdf(
+    jsPDF: JsPdfConstructor,
     plan: Plan,
     options: PdfOptions,
     availableImages: ReadonlySet<ImageId>,
     now: Date,
 ): Promise<Blob> {
-    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF({ orientation: options.orientation, unit: "mm", format: "a4", compress: true });
     const floors = plan.floors.filter((f) => options.floorIds.includes(f.id));
     const area = drawingAreaMm(options.orientation);
