@@ -29,6 +29,8 @@ import {
     type Shape,
     type Underlay,
     UnderlaySchema,
+    type Wall,
+    WallSchema,
 } from "@/lib/plan-schema";
 import {
     describeCalibrationIssue,
@@ -99,6 +101,12 @@ export interface InvalidOpening {
     reason: string;
 }
 
+/** A free wall not taken over. Walls have no name; the dialog calls each „Wand“. */
+export interface InvalidWall {
+    floorId: FloorId;
+    reason: string;
+}
+
 /** A room taken over whose wall thicknesses were missing, invalid or too many and got replaced. */
 export interface WallIssue {
     floorId: FloorId;
@@ -140,6 +148,8 @@ export interface UnknownFloor {
     names: string[];
     /** Names of its rooms in file order (name, else „Raum“). */
     roomNames: string[];
+    /** Number of its free walls. */
+    wallCount: number;
 }
 
 /** An underlay not taken over, or only in changed form (e.g. without calibration). */
@@ -172,11 +182,15 @@ export interface ImportSuccess {
     countsByFloor: Record<FloorId, number>;
     /** Number of rooms per floor taken over, in floor order. */
     roomCountsByFloor: Record<FloorId, number>;
+    /** Number of free walls taken over, on all floors. */
+    wallCount: number;
     /** Floor entries not taken over, in file order. */
     invalidFloors: InvalidFloor[];
     unknownFloors: UnknownFloor[];
     invalidShapes: InvalidShape[];
     invalidRooms: InvalidRoom[];
+    /** Free walls not taken over, in floor and file order. */
+    invalidWalls: InvalidWall[];
     /** Openings not taken over (their rooms are), in floor and file order. */
     invalidOpenings: InvalidOpening[];
     /** Rooms taken over with replaced wall thicknesses, in floor and file order. */
@@ -198,6 +212,8 @@ export interface ImportSuccess {
     reassignedRoomIds: number;
     /** Number of openings whose id already occurred earlier in the file. */
     reassignedOpeningIds: number;
+    /** Number of free walls whose id already occurred earlier in the file. */
+    reassignedWallIds: number;
     filledMetadata: FilledMetadata[];
     /** Version differs or anything above is not empty → „Trotzdem importieren“. */
     hasWarnings: boolean;
@@ -381,6 +397,23 @@ function reassignDuplicateIds<T extends { id: string }>(
     return { result, reassigned };
 }
 
+/** `wallsByFloor` as a record; missing or no object means no walls (nothing to report). */
+function rawWallLists(raw: unknown): RawRecord {
+    return isRecord(raw) ? raw : {};
+}
+
+/** German reason why `WallSchema` rejected a free wall. */
+export function describeWallIssue(error: z.ZodError, raw: unknown): string {
+    if (!isRecord(raw)) return GENERIC_REASON;
+    const at = (key: string) => error.issues.some((issue) => issue.path[0] === key);
+    if (at("startCm") || at("endCm")) {
+        const zeroLength = error.issues.every((issue) => issue.code === "custom" && issue.message === "Wall of 0 cm");
+        return zeroLength ? "Wand hat keine Länge" : "Punkte ungültig";
+    }
+    if (at("thicknessCm")) return "Dicke ungültig";
+    return GENERIC_REASON;
+}
+
 /** Name of a shape in the report: label, else the German kind name, else „Form“. */
 function shapeName(raw: unknown): string {
     if (!isRecord(raw)) return "Form";
@@ -516,6 +549,7 @@ type WarningParts = Pick<
     | "invalidShapes"
     | "invalidRooms"
     | "invalidOpenings"
+    | "invalidWalls"
     | "wallIssues"
     | "colorIssues"
     | "settingsIssues"
@@ -523,6 +557,7 @@ type WarningParts = Pick<
     | "reassignedIds"
     | "reassignedRoomIds"
     | "reassignedOpeningIds"
+    | "reassignedWallIds"
     | "filledMetadata"
 >;
 
@@ -535,6 +570,7 @@ function computeHasWarnings(parts: WarningParts): boolean {
         parts.invalidShapes.length > 0 ||
         parts.invalidRooms.length > 0 ||
         parts.invalidOpenings.length > 0 ||
+        parts.invalidWalls.length > 0 ||
         parts.wallIssues.length > 0 ||
         parts.colorIssues.length > 0 ||
         parts.settingsIssues.length > 0 ||
@@ -542,6 +578,7 @@ function computeHasWarnings(parts: WarningParts): boolean {
         parts.reassignedIds > 0 ||
         parts.reassignedRoomIds > 0 ||
         parts.reassignedOpeningIds > 0 ||
+        parts.reassignedWallIds > 0 ||
         parts.filledMetadata.length > 0
     );
 }
@@ -708,15 +745,37 @@ export function analyzePlanFile(
         passages: allOpenings.filter((o) => o.kind === "passage").length,
     };
 
-    // 6. Unknown floors (also those of rejected floor entries): reported with their shape and room names, never taken over
-    const unknownIds = [...new Set([...Object.keys(rawShapesByFloor), ...Object.keys(rawRoomsByFloor)])].filter(
-        (floorId) => !isFloorId(floorId),
-    );
-    const unknownFloors: UnknownFloor[] = unknownIds.map((floorId) => ({
-        floorId,
-        names: (Object.hasOwn(rawShapesByFloor, floorId) ? rawShapesByFloor[floorId] : []).map(shapeName),
-        roomNames: (Object.hasOwn(rawRoomsByFloor, floorId) ? rawRoomsByFloor[floorId] : []).map(roomName),
-    }));
+    // 5b. Free walls of the floors taken over, in floor order; a missing list means no walls.
+    const rawWallsByFloor = rawWallLists(data.wallsByFloor);
+    const invalidWalls: InvalidWall[] = [];
+    const validWallsByFloor = new Map<FloorId, Wall[]>();
+    for (const { id: floorId } of floors) {
+        const rawWalls = Object.hasOwn(rawWallsByFloor, floorId) ? rawWallsByFloor[floorId] : [];
+        const valid: Wall[] = [];
+        if (!Array.isArray(rawWalls)) invalidWalls.push({ floorId, reason: GENERIC_REASON });
+        for (const raw of Array.isArray(rawWalls) ? rawWalls : []) {
+            const result = WallSchema.safeParse(raw);
+            if (result.success) valid.push(result.data);
+            else invalidWalls.push({ floorId, reason: describeWallIssue(result.error, raw) });
+        }
+        validWallsByFloor.set(floorId, valid);
+    }
+    const { result: wallsByFloor, reassigned: reassignedWallIds } = reassignDuplicateIds(floors, validWallsByFloor, newId);
+    const wallCount = floors.reduce((sum, { id }) => sum + wallsByFloor[id].length, 0);
+
+    // 6. Unknown floors (also those of rejected floor entries): reported with their shapes, rooms and walls, never taken over
+    const unknownIds = [
+        ...new Set([...Object.keys(rawShapesByFloor), ...Object.keys(rawRoomsByFloor), ...Object.keys(rawWallsByFloor)]),
+    ].filter((floorId) => !isFloorId(floorId));
+    const unknownFloors: UnknownFloor[] = unknownIds.map((floorId) => {
+        const rawWalls = Object.hasOwn(rawWallsByFloor, floorId) ? rawWallsByFloor[floorId] : [];
+        return {
+            floorId,
+            names: (Object.hasOwn(rawShapesByFloor, floorId) ? rawShapesByFloor[floorId] : []).map(shapeName),
+            roomNames: (Object.hasOwn(rawRoomsByFloor, floorId) ? rawRoomsByFloor[floorId] : []).map(roomName),
+            wallCount: Array.isArray(rawWalls) ? rawWalls.length : 0,
+        };
+    });
 
     // 7. Underlays of the floors taken over; only an invalid calibration keeps the underlay (without it)
     const underlays = readUnderlays(data.underlayByFloor, isFloorId);
@@ -758,6 +817,7 @@ export function analyzePlanFile(
         underlayByFloor,
         shapesByFloor,
         roomsByFloor,
+        wallsByFloor,
         settings,
     });
     if (!built.success) return failure(fileName, "not-a-plan");
@@ -769,6 +829,7 @@ export function analyzePlanFile(
         invalidShapes,
         invalidRooms,
         invalidOpenings,
+        invalidWalls,
         wallIssues,
         colorIssues,
         settingsIssues,
@@ -776,6 +837,7 @@ export function analyzePlanFile(
         reassignedIds,
         reassignedRoomIds,
         reassignedOpeningIds,
+        reassignedWallIds,
         filledMetadata,
     });
 
@@ -789,11 +851,13 @@ export function analyzePlanFile(
         floors: built.data.floors,
         countsByFloor,
         roomCountsByFloor,
+        wallCount,
         invalidFloors,
         unknownFloors,
         invalidShapes,
         invalidRooms,
         invalidOpenings,
+        invalidWalls,
         wallIssues,
         colorIssues,
         settingsIssues,
@@ -803,6 +867,7 @@ export function analyzePlanFile(
         reassignedIds,
         reassignedRoomIds,
         reassignedOpeningIds,
+        reassignedWallIds,
         filledMetadata,
         hasWarnings,
     };

@@ -4,9 +4,11 @@ import {
     addOpening,
     addRoom,
     addShape,
+    addWall,
     createEmptyPlan,
     moveFloor,
     moveRoom,
+    moveWall,
     removeFloor,
     removeOpening,
     removeRoom,
@@ -26,7 +28,7 @@ import {
 import { resolveHistoryFocus, type HistoryFocus, resolveHistoryName, sameContent } from "@/lib/plan-diff";
 import type { Opening, Plan } from "@/lib/plan-schema";
 import { setEdgeLength } from "@/lib/room-geometry";
-import { CAL_EG, CAL_OG, legacyPlan, rect, rectPoints, room, underlay, uuid } from "@/test/plan-fixtures";
+import { CAL_EG, CAL_OG, legacyPlan, rect, rectPoints, room, underlay, uuid, wall } from "@/test/plan-fixtures";
 
 const T0 = new Date("2026-11-01T10:00:00.000Z");
 const T1 = new Date("2026-11-11T10:00:00.000Z");
@@ -228,6 +230,21 @@ describe("rooms", () => {
         const before = withRooms();
         const after = updateShape(before, "eg", uuid(1), { x: 5 }, T1);
         expect(resolveHistoryFocus(before, after)).toEqual({ floorId: "eg", shapeId: uuid(1), roomId: null, openingId: null });
+    });
+});
+
+describe("walls", () => {
+    it("sees an added and a moved wall", () => {
+        const plan = basePlan();
+        const withWall = addWall(plan, "og", wall(30), T1);
+        expect(sameContent(plan, withWall)).toBe(false);
+        expect(sameContent(withWall, moveWall(withWall, "og", uuid(30), 5, 0, T1))).toBe(false);
+    });
+
+    it("undoing a drawn wall on the upper floor focuses that floor without a shape or room", () => {
+        const after = basePlan();
+        const before = addWall(after, "og", wall(30), T1);
+        expect(resolveHistoryFocus(before, after)).toEqual({ floorId: "og", shapeId: null, roomId: null, openingId: null });
     });
 });
 

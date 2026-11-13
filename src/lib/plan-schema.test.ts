@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { FACTORY_SETTINGS } from "@/lib/plan-settings";
-import { FloorSchema, MAX_FLOORS, OpeningSchema, PlanSchema, RoomSchema, ShapeSchema, UnderlaySchema } from "@/lib/plan-schema";
+import {
+    FloorSchema,
+    MAX_FLOORS,
+    OpeningSchema,
+    PlanSchema,
+    RoomSchema,
+    ShapeSchema,
+    UnderlaySchema,
+    WallSchema,
+} from "@/lib/plan-schema";
 import { CAL_EG, STYLE, underlay, underlayWithoutImage, uuid } from "@/test/plan-fixtures";
 
 const base = { id: uuid(1), x: 250, y: 120, rotationDeg: 0, mirrored: false, style: STYLE };
@@ -26,7 +35,7 @@ const VALID = {
 const valid = (shape: unknown) => ShapeSchema.safeParse(shape).success;
 
 const emptyPlan = {
-    schemaVersion: 11,
+    schemaVersion: 12,
     name: "Meine Planung",
     createdAt: "2026-11-01T10:00:00.000Z",
     updatedAt: "2026-11-01T10:00:00.000Z",
@@ -39,6 +48,7 @@ const emptyPlan = {
     underlayByFloor: {},
     shapesByFloor: { eg: [], og: [], dg: [] },
     roomsByFloor: { eg: [], og: [], dg: [] },
+    wallsByFloor: { eg: [], og: [], dg: [] },
     settings: { ...FACTORY_SETTINGS },
 };
 
@@ -164,9 +174,9 @@ describe("PlanSchema", () => {
         expect(validPlan({ ...emptyPlan, shapesByFloor: { eg: [], og: [] } })).toBe(false);
     });
 
-    it("rejects schemaVersion 10 and 12", () => {
-        expect(validPlan({ ...emptyPlan, schemaVersion: 10 })).toBe(false);
-        expect(validPlan({ ...emptyPlan, schemaVersion: 12 })).toBe(false);
+    it("rejects schemaVersion 11 and 13", () => {
+        expect(validPlan({ ...emptyPlan, schemaVersion: 11 })).toBe(false);
+        expect(validPlan({ ...emptyPlan, schemaVersion: 13 })).toBe(false);
     });
 
     it("accepts a calibrated underlay on the ground floor and an uncalibrated one upstairs", () => {
@@ -256,6 +266,7 @@ describe("floors", () => {
         activeFloorId: floors[0]?.id ?? "eg",
         shapesByFloor: Object.fromEntries(floors.map((f) => [f.id, []])),
         roomsByFloor: Object.fromEntries(floors.map((f) => [f.id, []])),
+        wallsByFloor: Object.fromEntries(floors.map((f) => [f.id, []])),
     });
 
     it("accepts „Keller“, „Erdgeschoss“, „Dachgeschoss“ in this order", () => {
@@ -269,7 +280,7 @@ describe("floors", () => {
     });
 
     it("rejects a plan without floor and one with 9 floors", () => {
-        expect(validPlan({ ...emptyPlan, floors: [], shapesByFloor: {}, roomsByFloor: {} })).toBe(false);
+        expect(validPlan({ ...emptyPlan, floors: [], shapesByFloor: {}, roomsByFloor: {}, wallsByFloor: {} })).toBe(false);
         const nine = Array.from({ length: MAX_FLOORS + 1 }, (_, i) => ({ id: `f${i}`, name: `Etage ${i}` }));
         expect(validPlan(withFloors(nine))).toBe(false);
         expect(validPlan(withFloors(nine.slice(0, MAX_FLOORS)))).toBe(true);
@@ -637,5 +648,63 @@ describe("PlanSchema settings (Einstellungen im Plan)", () => {
     it("accepts a plan with changed, valid settings", () => {
         const settings = { ...FACTORY_SETTINGS, defaultWallThicknessCm: 11.5, snapStepCm: 2.5, defaultRoomColor: "#BBF7D0" };
         expect(PlanSchema.safeParse({ ...emptyPlan, settings }).success).toBe(true);
+    });
+});
+
+describe("WallSchema (Gültige Wand)", () => {
+    const WALL = { id: uuid(60), startCm: { x: 100, y: 100 }, endCm: { x: 430, y: 100 }, thicknessCm: 15 };
+    const valid = (wall: unknown) => WallSchema.safeParse(wall).success;
+
+    it("accepts a wall from (100, 100) to (430, 100) with 15 cm (Gerade Wand)", () => {
+        expect(valid(WALL)).toBe(true);
+    });
+
+    it("rejects a wall whose start and end are the same (Wand ohne Länge)", () => {
+        expect(valid({ ...WALL, endCm: { x: 100, y: 100 } })).toBe(false);
+    });
+
+    it("accepts a wall of 0.1 cm", () => {
+        expect(valid({ ...WALL, endCm: { x: 100.1, y: 100 } })).toBe(true);
+    });
+
+    it("rejects a thickness of 0 cm and of 120 cm (Zu dicke Wand), accepts 100 cm", () => {
+        expect(valid({ ...WALL, thicknessCm: 0 })).toBe(false);
+        expect(valid({ ...WALL, thicknessCm: 120 })).toBe(false);
+        expect(valid({ ...WALL, thicknessCm: 100 })).toBe(true);
+    });
+
+    it("rejects a missing point and an id that is no uuid", () => {
+        const { endCm: _e, ...withoutEnd } = WALL;
+        expect(valid(withoutEnd)).toBe(false);
+        expect(valid({ ...WALL, id: "wand" })).toBe(false);
+    });
+});
+
+describe("PlanSchema walls (Wände im Plan)", () => {
+    const validPlan = (plan: unknown) => PlanSchema.safeParse(plan).success;
+    const WALL = { id: uuid(61), startCm: { x: 0, y: 0 }, endCm: { x: 0, y: 300 }, thicknessCm: 11.5 };
+
+    it("keeps a ground-floor wall and an empty list upstairs (Wände je Etage)", () => {
+        const plan = PlanSchema.parse({ ...emptyPlan, wallsByFloor: { eg: [WALL], og: [], dg: [] } });
+        expect(plan.wallsByFloor.og).toEqual([]);
+        expect(plan.wallsByFloor.eg).toEqual([WALL]);
+    });
+
+    it("rejects a wall under „keller“ without such a floor (Wand unter unbekannter Etage)", () => {
+        expect(validPlan({ ...emptyPlan, wallsByFloor: { ...emptyPlan.wallsByFloor, keller: [WALL] } })).toBe(false);
+    });
+
+    it("rejects a floor without wall list and a plan without wallsByFloor (Wandliste fehlt)", () => {
+        expect(validPlan({ ...emptyPlan, wallsByFloor: { og: [], dg: [] } })).toBe(false);
+        const { wallsByFloor: _walls, ...withoutWalls } = emptyPlan;
+        expect(validPlan(withoutWalls)).toBe(false);
+    });
+
+    it("rejects the same wall id on the ground floor and upstairs (Doppelte Wand-ID)", () => {
+        expect(validPlan({ ...emptyPlan, wallsByFloor: { eg: [WALL], og: [{ ...WALL }], dg: [] } })).toBe(false);
+    });
+
+    it("rejects an invalid wall", () => {
+        expect(validPlan({ ...emptyPlan, wallsByFloor: { eg: [{ ...WALL, thicknessCm: 120 }], og: [], dg: [] } })).toBe(false);
     });
 });

@@ -3,7 +3,17 @@
 import type { Calibration } from "@/lib/calibration-schema";
 import { FACTORY_SETTINGS } from "@/lib/plan-settings";
 import { DEFAULT_WALL_THICKNESS_CM } from "@/lib/room-geometry";
-import { PLAN_SCHEMA_VERSION, type Opening, type Plan, type PointCm, type Room, type Shape, type ShapeStyle, type Underlay } from "@/lib/plan-schema";
+import {
+    PLAN_SCHEMA_VERSION,
+    type Opening,
+    type Plan,
+    type PointCm,
+    type Room,
+    type Shape,
+    type ShapeStyle,
+    type Underlay,
+    type Wall,
+} from "@/lib/plan-schema";
 
 export const STYLE: ShapeStyle = { fill: "#E4E4E7", stroke: "#18181B", strokeWidth: 1, opacity: 1 };
 
@@ -53,6 +63,16 @@ export function room(
     locked = false,
 ): Room {
     return { id: uuid(n), name, pointsCm, openings, wallThicknessCm, color, locked };
+}
+
+/** Free wall with id `uuid(n)`; by default (100|100)→(430|100) with 15 cm („Waagerechte Wand“ from the spec). */
+export function wall(
+    n: number,
+    startCm: PointCm = { x: 100, y: 100 },
+    endCm: PointCm = { x: 430, y: 100 },
+    thicknessCm = DEFAULT_WALL_THICKNESS_CM,
+): Wall {
+    return { id: uuid(n), startCm, endCm, thicknessCm };
 }
 
 /** Spec example: 1 000 cm between P1 and P2 → 0,9986 px/cm. */
@@ -106,6 +126,7 @@ export function legacyPlan(now: Date): Plan {
         underlayByFloor: {},
         shapesByFloor: { eg: [], og: [], dg: [] },
         roomsByFloor: { eg: [], og: [], dg: [] },
+        wallsByFloor: { eg: [], og: [], dg: [] },
         settings: { ...FACTORY_SETTINGS },
     };
 }

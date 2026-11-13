@@ -25,6 +25,7 @@ interface HistoryState {
     selectedShapeId: string | null;
     selectedRoomId: string | null;
     selectedOpeningId: string | null;
+    selectedWallId: string | null;
     activeTool: string;
 }
 
@@ -58,6 +59,7 @@ function step<S extends HistoryState>(store: HistoryHost<S>, now: Date, directio
             selectedShapeId: shapeId,
             selectedRoomId: shapeId ? null : roomId,
             selectedOpeningId: shapeId || roomId ? null : openingId,
+            selectedWallId: null,
             activeTool: "select",
         } as Partial<S>);
     } finally {

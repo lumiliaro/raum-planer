@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_FLOOR_BOUNDS, floorContentBounds, visibleUnderlayRect } from "@/lib/content-bounds";
-import { CAL_EG, rect, rectPoints, room, underlay, uuid } from "@/test/plan-fixtures";
+import { CAL_EG, rect, rectPoints, room, underlay, uuid, wall } from "@/test/plan-fixtures";
 
 /** Underlay 1240 × 1754 px at 1 px/cm: 0 … 1 240 cm wide. */
 const SCAN = { x: 0, y: 0, width: 1240, height: 1754 };
@@ -33,6 +33,11 @@ describe("floorContentBounds", () => {
             width: 530,
             height: 451.5,
         });
+    });
+
+    it("contains a lone free wall with its thickness (Nur eine freie Wand)", () => {
+        const walls = [wall(1, { x: 2000, y: 0 }, { x: 2000, y: 600 }, 24)];
+        expect(floorContentBounds({ underlayRect: null, shapes: [], walls })).toEqual({ x: 1988, y: 0, width: 24, height: 600 });
     });
 
     it("is the underlay alone without shapes", () => {

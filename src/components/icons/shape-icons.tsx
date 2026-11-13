@@ -80,3 +80,12 @@ export function PassageIcon(props: ShapeIconProps) {
         </ShapeIcon>
     );
 }
+
+/** A single straight wall piece, drawn at a slant. */
+export function WallIcon(props: ShapeIconProps) {
+    return (
+        <ShapeIcon {...props}>
+            <path d="M3 17 17 3l4 4L7 21z" />
+        </ShapeIcon>
+    );
+}

@@ -2,13 +2,15 @@ import { useShallow } from "zustand/react/shallow";
 import { OpeningProperties } from "@/components/properties/OpeningProperties";
 import { RoomProperties } from "@/components/properties/RoomProperties";
 import { ShapeProperties } from "@/components/properties/ShapeProperties";
+import { WallProperties } from "@/components/properties/WallProperties";
 import { UnderlaySection } from "@/components/underlay/UnderlaySection";
-import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppStore } from "@/store/app-store";
+import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, selectSelectedWall, useAppStore } from "@/store/app-store";
 
-/** The selected shape's, room's or opening's properties; without a selection a hint and the active floor's underlay. */
+/** The selected shape's, room's, wall's or opening's properties; without a selection a hint and the active floor's underlay. */
 export function PropertiesPanel() {
     const shape = useAppStore(selectSelectedShape);
     const room = useAppStore(selectSelectedRoom);
+    const wall = useAppStore(selectSelectedWall);
     const selectedOpening = useAppStore(useShallow(selectSelectedOpening));
 
     return (
@@ -23,6 +25,10 @@ export function PropertiesPanel() {
             ) : room ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     <RoomProperties key={room.id} room={room} />
+                </div>
+            ) : wall ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                    <WallProperties key={wall.id} wall={wall} />
                 </div>
             ) : selectedOpening ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">

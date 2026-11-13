@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { toolForKey } from "@/components/layout/tools";
 import { TUTORIAL_STEPS } from "@/components/tutorial/tutorial-steps";
-import { addOpening, addRoom, addShape, createEmptyPlan, setActiveFloor, setCalibration } from "@/lib/plan";
+import { addOpening, addRoom, addShape, addWall, createEmptyPlan, setActiveFloor, setCalibration } from "@/lib/plan";
 import planV1Text from "@/lib/__fixtures__/plan-v1.json?raw";
 import planV2Text from "@/lib/__fixtures__/plan-v2.json?raw";
 import { PLAN_BACKUP_KEY, PLAN_PRE_MIGRATION_KEY, PLAN_STORAGE_KEY } from "@/lib/plan-storage";
@@ -20,6 +20,7 @@ import {
     selectSelectedOpening,
     selectSelectedRoom,
     selectSelectedShape,
+    selectSelectedWall,
     selectSettings,
 } from "@/store/app-store";
 import { startPlanAutosave } from "@/store/plan-autosave";
@@ -37,6 +38,7 @@ import {
     underlay,
     underlayWithoutImage,
     uuid,
+    wall,
 } from "@/test/plan-fixtures";
 
 const PANEL_KEY = "raumplaner.ui.propertiesPanelOpen";
@@ -344,11 +346,11 @@ describe("app store", () => {
             expect(store.getState().recoveryNotice).toBeNull();
         });
 
-        it("saves a stored version-1 plan as version 11 right at the start, without notice", () => {
+        it("saves a stored version-1 plan as version 12 right at the start, without notice", () => {
             const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV1Text });
             const store = createAppStore(storage, { now });
             const saved = JSON.parse(storage.getItem(PLAN_STORAGE_KEY)!);
-            expect(saved.schemaVersion).toBe(11);
+            expect(saved.schemaVersion).toBe(12);
             expect(saved).toEqual(store.getState().plan);
             expect(saved.floors.map((f: { name: string }) => f.name)).toEqual(["Erdgeschoss", "Obergeschoss", "Dachgeschoss"]);
             expect(storage.getItem(PLAN_PRE_MIGRATION_KEY)).toBe(planV1Text);
@@ -356,12 +358,12 @@ describe("app store", () => {
             expect(store.getState().saveStatus).toBe("saved");
         });
 
-        it("converts a stored version-2 plan to version 11 at the start: eg/og/dg keep their calibration", () => {
+        it("converts a stored version-2 plan to version 12 at the start: eg/og/dg keep their calibration", () => {
             const v2 = JSON.parse(planV2Text);
             const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV2Text });
             const store = createAppStore(storage, { now });
             const saved = JSON.parse(storage.getItem(PLAN_STORAGE_KEY)!);
-            expect(saved.schemaVersion).toBe(11);
+            expect(saved.schemaVersion).toBe(12);
             expect(saved).toEqual(store.getState().plan);
             expect(calibrations(store.getState().plan)).toEqual(v2.calibrationByFloor);
             expect(Object.keys(store.getState().plan.underlayByFloor)).toEqual(["eg", "og", "dg"]);
@@ -373,7 +375,7 @@ describe("app store", () => {
         it("reports a failed save when the migrated plan cannot be written", () => {
             const storage = failingWrites(memoryStorage({ [PLAN_STORAGE_KEY]: planV1Text }), (key) => key === PLAN_STORAGE_KEY);
             const store = createAppStore(storage, { now });
-            expect(store.getState().plan.schemaVersion).toBe(11);
+            expect(store.getState().plan.schemaVersion).toBe(12);
             expect(store.getState().saveStatus).toBe("failed");
             expect(storage.getItem(PLAN_STORAGE_KEY)).toBe(planV1Text);
         });
@@ -1634,7 +1636,7 @@ describe("app store", () => {
 
         describe("distance on a wall before the first corner", () => {
             /** Top edge of „Raum 1“ (337,5 cm), outer side at y = −15 cm, measured from the left end. */
-            const anchor = { roomId: uuid(10), edgeIndex: 0, face: "outer", fromEnd: "start" } as const;
+            const anchor = { source: { kind: "room", roomId: uuid(10), edgeIndex: 0, face: "outer" }, fromEnd: "start" } as const;
 
             function typeOffset(text: string) {
                 const ctx = setup();
@@ -1690,7 +1692,7 @@ describe("app store", () => {
             it("discards the draft when the wall line is gone", () => {
                 const { store } = typeOffset("2");
                 store.getState().startWallOffset(anchor, "5");
-                store.setState({ roomDraft: { ...store.getState().roomDraft!, wallAnchor: { ...anchor, edgeIndex: 9 } } });
+                store.setState({ roomDraft: { ...store.getState().roomDraft!, wallAnchor: { ...anchor, source: { ...anchor.source, edgeIndex: 9 } } } });
                 expect(store.getState().commitWallOffset()).toBe(false);
                 expect(store.getState().roomDraft).toBeNull();
             });
@@ -2615,6 +2617,212 @@ describe("app store", () => {
             expect(JSON.parse(saved).shapesByFloor.eg).toHaveLength(2);
             expect(saved).not.toContain("clipboard");
             expect(createAppStore(storage, { now }).getState().clipboard).toBeNull();
+        });
+    });
+    describe("free walls", () => {
+        /** Ground floor with „Wohnen“ (0|0)–(500|400), 15 cm walls (uuid 10), wall A (100|200)→(400|200), 10 cm (uuid 20), shape (uuid 1). */
+        const A = wall(20, { x: 100, y: 200 }, { x: 400, y: 200 }, 10);
+        function setup(fn = (p: Plan) => p) {
+            const storage = storedPlan((p) => {
+                let plan = addRoom(p, "eg", room(10, "Wohnen", rectPoints(0, 0, 500, 400)), CREATED);
+                plan = addWall(plan, "eg", A, CREATED);
+                return fn(addShape(plan, "eg", rect(1), CREATED));
+            });
+            const store = createAppStore(storage, { now });
+            const steps = () => store.temporal.getState().pastStates.length;
+            const walls = (floor: "eg" | "og" | "dg" = "eg") => store.getState().plan.wallsByFloor[floor];
+            return { store, steps, walls };
+        }
+
+        describe("drawing (Wand zeichnen)", () => {
+            it("adds a wall from the start to the end with the default thickness, selected, tool back to 'select', one undo step", () => {
+                const { store, steps, walls } = setup((p) => ({ ...p, settings: { ...p.settings, defaultWallThicknessCm: 11.5 } }));
+                store.getState().selectShape(uuid(1));
+                store.getState().setActiveTool("wall");
+                expect(store.getState().addDraftPoint({ x: 0, y: 0 })).toBe(true);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 0, y: 0 }]);
+                expect(steps()).toBe(0);
+                expect(store.getState().addDraftPoint({ x: 0, y: 250 })).toBe(true);
+                const added = walls().at(-1)!;
+                expect(added).toMatchObject({ startCm: { x: 0, y: 0 }, endCm: { x: 0, y: 250 }, thicknessCm: 11.5 });
+                expect(selectSelectedWall(store.getState())).toEqual(added);
+                expect(store.getState().selectedShapeId).toBeNull();
+                expect(store.getState().activeTool).toBe("select");
+                expect(store.getState().roomDraft).toBeNull();
+                expect(steps()).toBe(1);
+                expect(store.getState().undo()).toBe(true);
+                expect(walls()).toEqual([A]);
+                expect(store.getState().redo()).toBe(true);
+                expect(walls()).toHaveLength(2);
+            });
+
+            it("sets the end at a typed length „237,5“ (Wand mit Maß vom Scan)", () => {
+                const { store, walls } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().addDraftPoint({ x: 0, y: 0 });
+                store.getState().setDraftLength("237,5");
+                expect(store.getState().commitDraftLength({ x: 0, y: 1 })).toBe(true);
+                expect(walls().at(-1)).toMatchObject({ startCm: { x: 0, y: 0 }, endCm: { x: 0, y: 237.5 } });
+            });
+
+            it("rejects a length of 0 with a hint and adds no wall (Ungültige Länge)", () => {
+                const { store, walls, steps } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().addDraftPoint({ x: 0, y: 0 });
+                store.getState().setDraftLength("0");
+                expect(store.getState().commitDraftLength({ x: 1, y: 0 })).toBe(false);
+                expect(store.getState().roomDraft?.hint).toBe("length");
+                expect(walls()).toEqual([A]);
+                expect(steps()).toBe(0);
+            });
+
+            it("adds no wall for an end on the start (Klick auf den Startpunkt)", () => {
+                const { store, walls } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().addDraftPoint({ x: 100, y: 100 });
+                expect(store.getState().addDraftPoint({ x: 100, y: 100 })).toBe(false);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 100, y: 100 }]);
+                expect(walls()).toEqual([A]);
+            });
+
+            it("removes the start with Backspace and discards it with Esc and on a floor switch (Wandzeichnen korrigieren und abbrechen)", () => {
+                const { store } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().addDraftPoint({ x: 100, y: 100 });
+                store.getState().removeLastDraftPoint();
+                expect(store.getState().roomDraft).toBeNull();
+                expect(store.getState().activeTool).toBe("wall");
+                store.getState().addDraftPoint({ x: 100, y: 100 });
+                store.getState().cancelDraft();
+                expect(store.getState().roomDraft).toBeNull();
+                store.getState().addDraftPoint({ x: 100, y: 100 });
+                store.getState().setActiveFloor("og");
+                expect(store.getState().roomDraft).toBeNull();
+            });
+
+            it("does not close: Enter with an empty field adds nothing", () => {
+                const { store, walls } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().addDraftPoint({ x: 100, y: 100 });
+                expect(store.getState().closeDraft()).toBe(false);
+                expect(walls()).toEqual([A]);
+            });
+
+            it("blocks undo while the start point is set", () => {
+                const { store } = setup();
+                store.getState().updateWall("eg", A.id, { thicknessCm: 24 });
+                store.getState().setActiveTool("wall");
+                store.getState().addDraftPoint({ x: 100, y: 100 });
+                expect(store.getState().undo()).toBe(false);
+            });
+
+            it("is locked in calibration mode", () => {
+                const { store } = setup();
+                store.getState().toggleCalibration();
+                expect(isToolEnabled(store.getState(), "wall")).toBe(false);
+                store.getState().setActiveTool("wall");
+                expect(store.getState().activeTool).toBe("select");
+            });
+
+            it("needs no room: usable on an empty floor (Leere Etage)", () => {
+                const { store } = setup();
+                store.getState().setActiveFloor("dg");
+                expect(isToolEnabled(store.getState(), "wall")).toBe(true);
+            });
+        });
+
+        describe("distance on a wall (Startpunkt einer Wand auf einer Wandlinie)", () => {
+            const roomAnchor = { source: { kind: "room", roomId: uuid(10), edgeIndex: 0, face: "outer" }, fromEnd: "start" } as const;
+            const wallAnchor = { source: { kind: "wall", wallId: A.id, side: "left" }, fromEnd: "start" } as const;
+
+            it("sets the start at 260 cm on the outer side of „Wohnen“ (Abstand eintippen)", () => {
+                const { store } = setup();
+                store.getState().setActiveTool("wall");
+                expect(store.getState().startWallOffset(roomAnchor, "260")).toBe(true);
+                expect(store.getState().commitWallOffset()).toBe(true);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 260, y: -15 }]);
+            });
+
+            it("measures on a side of another wall, from the other end after Tab", () => {
+                const { store } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().startWallOffset(wallAnchor, "130");
+                store.getState().toggleWallOffsetEnd();
+                expect(store.getState().commitWallOffset()).toBe(true);
+                expect(store.getState().roomDraft?.points).toEqual([{ x: 270, y: 205 }]);
+            });
+
+            it("rejects a distance over the length of the wall side", () => {
+                const { store } = setup();
+                store.getState().setActiveTool("wall");
+                store.getState().startWallOffset(wallAnchor, "320");
+                expect(store.getState().commitWallOffset()).toBe(false);
+                expect(store.getState().roomDraft?.hint).toBe("wallTooLong");
+            });
+
+            it("does not use the sides of free walls with the tool „Raum“", () => {
+                const { store } = setup();
+                store.getState().setActiveTool("room");
+                store.getState().startWallOffset(wallAnchor, "130");
+                expect(store.getState().commitWallOffset()).toBe(false);
+                expect(store.getState().roomDraft).toBeNull();
+            });
+        });
+
+        describe("selection and editing", () => {
+            it("selecting a wall deselects shape, room and opening and vice versa (Wand anklicken)", () => {
+                const { store } = setup();
+                store.getState().selectRoom(uuid(10));
+                store.getState().selectWall(A.id);
+                expect(store.getState().selectedRoomId).toBeNull();
+                expect(selectSelectedWall(store.getState())).toEqual(A);
+                store.getState().selectShape(uuid(1));
+                expect(store.getState().selectedWallId).toBeNull();
+                store.getState().selectWall(A.id);
+                store.getState().selectShape(null);
+                expect(store.getState().selectedWallId).toBeNull();
+            });
+
+            it("moving, length, thickness and deleting are one undo step each; a rejected input none", () => {
+                const { store, steps, walls } = setup();
+                expect(store.getState().moveWall("eg", A.id, 50, 20)).toBe(true);
+                expect(walls()[0]).toMatchObject({ startCm: { x: 150, y: 220 }, endCm: { x: 450, y: 220 } });
+                expect(store.getState().updateWall("eg", A.id, { endCm: { x: 400, y: 220 } })).toBe(true);
+                expect(store.getState().updateWall("eg", A.id, { thicknessCm: 24 })).toBe(true);
+                expect(store.getState().updateWall("eg", A.id, { thicknessCm: 150 })).toBe(false);
+                expect(steps()).toBe(3);
+                store.getState().selectWall(A.id);
+                expect(store.getState().deleteSelectedWall()).toBe(true);
+                expect(walls()).toEqual([]);
+                expect(store.getState().selectedWallId).toBeNull();
+                expect(steps()).toBe(4);
+                expect(store.getState().plan.roomsByFloor.eg).toHaveLength(1);
+                expect(store.getState().plan.shapesByFloor.eg).toHaveLength(1);
+            });
+
+            it("undo after switching floors activates the wall's floor (Ende ziehen rückgängig)", () => {
+                const { store, walls } = setup();
+                store.getState().updateWall("eg", A.id, { endCm: { x: 490, y: 200 } });
+                store.getState().setActiveFloor("og");
+                expect(store.getState().undo()).toBe(true);
+                expect(store.getState().plan.activeFloorId).toBe("eg");
+                expect(walls()[0].endCm).toEqual({ x: 400, y: 200 });
+            });
+
+            it("copy, cut and duplicate do nothing with a wall selected", () => {
+                const { store, walls } = setup();
+                store.getState().selectWall(A.id);
+                expect(store.getState().copySelection()).toBe(false);
+                expect(store.getState().cutSelection()).toBe(false);
+                expect(store.getState().duplicateSelection()).toBe(false);
+                expect(store.getState().clipboard).toBeNull();
+                expect(walls()).toEqual([A]);
+            });
+
+            it("deleteSelectedWall is false without a selection", () => {
+                const { store } = setup();
+                expect(store.getState().deleteSelectedWall()).toBe(false);
+            });
         });
     });
 });

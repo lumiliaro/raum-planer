@@ -6,6 +6,7 @@
  */
 
 import { CalibrationSchema, type Calibration } from "@/lib/calibration-schema";
+import { formatRoomCount, formatShapeCount, formatWallCount } from "@/lib/format";
 import { reanchorOpenings } from "@/lib/opening-reanchor";
 import { FACTORY_SETTINGS, PlanSettingsSchema, sameSettings, type SettingsPatch } from "@/lib/plan-settings";
 import { roundCm, shapeIdsInRoom, translatePoints } from "@/lib/room-geometry";
@@ -27,7 +28,10 @@ import {
     type ShapePatch,
     type Underlay,
     UnderlaySchema,
+    type Wall,
+    WallSchema,
 } from "@/lib/plan-schema";
+import { translateWall } from "@/lib/wall-geometry";
 
 export const DEFAULT_PLAN_NAME = "Meine Planung";
 export const DEFAULT_FLOOR_NAME = "Erdgeschoss";
@@ -38,7 +42,7 @@ export const ROOM_NAME_PREFIX = "Raum";
 export type ReorderDirection = "forward" | "backward" | "front" | "back";
 export type FloorMoveDirection = "up" | "down";
 
-/** One floor „Erdgeschoss“ without shapes and rooms, with a new id (not `eg`, which stays reserved for floors taken over from version 1). */
+/** One floor „Erdgeschoss“ without shapes, rooms and walls, with a new id (not `eg`, which stays reserved for floors taken over from version 1). */
 export function createEmptyPlan(now: Date, newId: () => string): Plan {
     const timestamp = now.toISOString();
     const floorId = newId();
@@ -52,6 +56,7 @@ export function createEmptyPlan(now: Date, newId: () => string): Plan {
         underlayByFloor: {},
         shapesByFloor: { [floorId]: [] },
         roomsByFloor: { [floorId]: [] },
+        wallsByFloor: { [floorId]: [] },
         settings: { ...FACTORY_SETTINGS },
     };
 }
@@ -70,13 +75,20 @@ export function nextFloorName(floors: readonly Floor[]): string {
 }
 
 /**
- * Appends a floor without shapes, rooms and underlay and makes it active.
+ * Appends a floor without shapes, rooms, walls and underlay and makes it active.
  * Rejects at `MAX_FLOORS`, for an id in use and for an invalid name.
  */
 export function addFloor(plan: Plan, id: FloorId, name: string, now: Date): Plan {
     const parsed = FloorSchema.safeParse({ id, name });
     if (!parsed.success || plan.floors.length >= MAX_FLOORS) return plan;
-    if (hasFloor(plan, id) || Object.hasOwn(plan.shapesByFloor, id) || Object.hasOwn(plan.roomsByFloor, id)) return plan;
+    if (
+        hasFloor(plan, id) ||
+        Object.hasOwn(plan.shapesByFloor, id) ||
+        Object.hasOwn(plan.roomsByFloor, id) ||
+        Object.hasOwn(plan.wallsByFloor, id)
+    ) {
+        return plan;
+    }
     return {
         ...plan,
         updatedAt: now.toISOString(),
@@ -84,6 +96,7 @@ export function addFloor(plan: Plan, id: FloorId, name: string, now: Date): Plan
         activeFloorId: id,
         shapesByFloor: { ...plan.shapesByFloor, [id]: [] },
         roomsByFloor: { ...plan.roomsByFloor, [id]: [] },
+        wallsByFloor: { ...plan.wallsByFloor, [id]: [] },
     };
 }
 
@@ -117,13 +130,42 @@ export function canMoveFloor(plan: Plan, id: FloorId, direction: FloorMoveDirect
     return floorMoveIndices(plan, id, direction) !== null;
 }
 
+/** `true` if the floor has shapes, rooms, walls or an underlay; removing it then asks first. */
+export function floorHasContent(plan: Plan, floorId: FloorId): boolean {
+    return (
+        (plan.shapesByFloor[floorId]?.length ?? 0) > 0 ||
+        (plan.roomsByFloor[floorId]?.length ?? 0) > 0 ||
+        (plan.wallsByFloor[floorId]?.length ?? 0) > 0 ||
+        plan.underlayByFloor[floorId] !== undefined
+    );
+}
+
+/**
+ * What the question before removing a floor names after „mit“: its shapes,
+ * rooms and walls, e.g. „2 Formen, 3 Räumen und 1 Wand“; with none of them
+ * „Vorlage“ (the floor then has only an underlay).
+ */
+export function floorRemovalContent(plan: Plan, floorId: FloorId): string {
+    const shapes = plan.shapesByFloor[floorId]?.length ?? 0;
+    const rooms = plan.roomsByFloor[floorId]?.length ?? 0;
+    const walls = plan.wallsByFloor[floorId]?.length ?? 0;
+    const parts = [
+        ...(shapes > 0 ? [formatShapeCount(shapes)] : []),
+        ...(rooms > 0 ? [formatRoomCount(rooms, { dative: true })] : []),
+        ...(walls > 0 ? [formatWallCount(walls, { dative: true })] : []),
+    ];
+    if (parts.length === 0) return "Vorlage";
+    if (parts.length === 1) return parts[0];
+    return `${parts.slice(0, -1).join(", ")} und ${parts.at(-1)}`;
+}
+
 /** `true` if `removeFloor` would remove the floor: it exists and is not the only one. */
 export function canRemoveFloor(plan: Plan, id: FloorId): boolean {
     return plan.floors.length > 1 && hasFloor(plan, id);
 }
 
 /**
- * Removes the floor with its shapes, rooms and underlay; other floors stay the
+ * Removes the floor with its shapes, rooms, walls and underlay; other floors stay the
  * same objects. If it was active, the following floor becomes active, for the
  * last floor the previous one. The only floor is never removed.
  */
@@ -133,9 +175,10 @@ export function removeFloor(plan: Plan, id: FloorId, now: Date): Plan {
     const floors = plan.floors.toSpliced(index, 1);
     const { [id]: _removedShapes, ...shapesByFloor } = plan.shapesByFloor;
     const { [id]: _removedRooms, ...roomsByFloor } = plan.roomsByFloor;
+    const { [id]: _removedWalls, ...wallsByFloor } = plan.wallsByFloor;
     const { [id]: _removedUnderlay, ...underlayByFloor } = plan.underlayByFloor;
     const activeFloorId = plan.activeFloorId === id ? floors[Math.min(index, floors.length - 1)].id : plan.activeFloorId;
-    return { ...plan, updatedAt: now.toISOString(), floors, activeFloorId, shapesByFloor, roomsByFloor, underlayByFloor };
+    return { ...plan, updatedAt: now.toISOString(), floors, activeFloorId, shapesByFloor, roomsByFloor, wallsByFloor, underlayByFloor };
 }
 
 function withShapes(plan: Plan, floorId: FloorId, shapes: Shape[], now: Date): Plan {
@@ -311,6 +354,65 @@ export function removeRoom(plan: Plan, floorId: FloorId, id: string, now: Date):
     );
 }
 
+function withWalls(plan: Plan, floorId: FloorId, walls: Wall[], now: Date): Plan {
+    return { ...plan, updatedAt: now.toISOString(), wallsByFloor: { ...plan.wallsByFloor, [floorId]: walls } };
+}
+
+/** Appends a valid free wall (it lies on top of the floor's walls). Rejects invalid walls and ids used on any floor. */
+export function addWall(plan: Plan, floorId: FloorId, wall: Wall, now: Date): Plan {
+    const walls = plan.wallsByFloor[floorId];
+    const parsed = WallSchema.safeParse(wall);
+    if (!walls || !hasFloor(plan, floorId) || !parsed.success) return plan;
+    const idTaken = Object.values(plan.wallsByFloor).some((list) => list.some((w) => w.id === parsed.data.id));
+    if (idTaken) return plan;
+    return withWalls(plan, floorId, [...walls, parsed.data], now);
+}
+
+/** Changeable fields of a free wall; the id stays. */
+export type WallPatch = Partial<Omit<Wall, "id">>;
+
+const samePoint = (a: PointCm, b: PointCm) => a.x === b.x && a.y === b.y;
+
+/**
+ * Merges `patch` (start, end, thickness) into the wall, keeping its id and its
+ * place in the list. Rejects a change after which the wall would be invalid
+ * and one that changes nothing.
+ */
+export function updateWall(plan: Plan, floorId: FloorId, id: string, patch: WallPatch, now: Date): Plan {
+    const walls = plan.wallsByFloor[floorId];
+    const index = walls?.findIndex((w) => w.id === id) ?? -1;
+    if (index < 0) return plan;
+    const current = walls[index];
+    const parsed = WallSchema.safeParse({ ...current, ...patch, id: current.id });
+    if (!parsed.success) return plan;
+    const next = parsed.data;
+    if (samePoint(next.startCm, current.startCm) && samePoint(next.endCm, current.endCm) && next.thicknessCm === current.thicknessCm) {
+        return plan;
+    }
+    return withWalls(plan, floorId, walls.with(index, next), now);
+}
+
+/** Moves both ends of the wall by `dx`/`dy` cm (rounded to 0.1 cm). Rejects a move by 0. */
+export function moveWall(plan: Plan, floorId: FloorId, id: string, dx: number, dy: number, now: Date): Plan {
+    if (dx === 0 && dy === 0) return plan;
+    const wall = plan.wallsByFloor[floorId]?.find((w) => w.id === id);
+    if (!wall) return plan;
+    const { startCm, endCm } = translateWall(wall, dx, dy);
+    return updateWall(plan, floorId, id, { startCm, endCm }, now);
+}
+
+/** Removes the wall; rooms and shapes stay as they are. */
+export function removeWall(plan: Plan, floorId: FloorId, id: string, now: Date): Plan {
+    const walls = plan.wallsByFloor[floorId];
+    if (!walls?.some((w) => w.id === id)) return plan;
+    return withWalls(
+        plan,
+        floorId,
+        walls.filter((w) => w.id !== id),
+        now,
+    );
+}
+
 /** Where an opening is: its room on the floor and both indices. */
 export interface OpeningLocation {
     room: Room;
@@ -478,13 +580,14 @@ export function resetSettings(plan: Plan, now: Date): Plan {
 }
 
 /**
- * `true` if replacing the plan would lose anything: at least one shape, room
- * or underlay. Empty floors do not count; they are quickly created again.
+ * `true` if replacing the plan would lose anything: at least one shape, room,
+ * wall or underlay. Empty floors do not count; they are quickly created again.
  */
 export function planHasContent(plan: Plan): boolean {
     return (
         Object.values(plan.shapesByFloor).some((shapes) => shapes.length > 0) ||
         Object.values(plan.roomsByFloor).some((rooms) => rooms.length > 0) ||
+        Object.values(plan.wallsByFloor).some((walls) => walls.length > 0) ||
         Object.keys(plan.underlayByFloor).length > 0
     );
 }

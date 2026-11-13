@@ -35,6 +35,7 @@ import {
     underlay,
     underlayWithoutImage,
     uuid,
+    wall,
 } from "@/test/plan-fixtures";
 
 const NOW = new Date("2026-11-11T18:30:00.000Z");
@@ -68,6 +69,12 @@ const file = (overrides: Record<string, unknown> = {}) => ({
     underlayByFloor: {},
     shapesByFloor: { eg: [], og: [], dg: [] },
     roomsByFloor: { eg: [], og: [], dg: [] },
+    // One empty wall list per floor of the file, so a test with its own floors gets no unknown floor from walls.
+    wallsByFloor: Object.fromEntries(
+        (Array.isArray(overrides.floors) ? (overrides.floors as unknown[]) : LEGACY_FLOORS).flatMap((f) =>
+            typeof f === "object" && f !== null && typeof (f as { id?: unknown }).id === "string" ? [[(f as { id: string }).id, []]] : [],
+        ),
+    ),
     ...overrides,
 });
 
@@ -165,6 +172,7 @@ describe("analyzePlanFile – fixture and round trip", () => {
             floors: [{ id: keller, name: "Keller" }, ...plan.floors],
             shapesByFloor: { ...plan.shapesByFloor, [keller]: [] },
             roomsByFloor: { ...plan.roomsByFloor, [keller]: [] },
+            wallsByFloor: { ...plan.wallsByFloor, [keller]: [] },
         };
         plan = addShape(plan, "eg", rect(1, { widthCm: 220, depthCm: 95, cornerRadiusCm: 10 }), at);
         plan = addShape(
@@ -199,7 +207,7 @@ describe("analyzePlanFile – shapes", () => {
     it("lists an unknown floor with its shape names and does not take them over", () => {
         const kg = [rect(1, { label: "Regal" }), rect(2, { label: "Waschmaschine" }), rect(3, { label: "Trockner" })];
         const result = expectOk(analyze(file({ shapesByFloor: { eg: [rect(4)], og: [], dg: [], kg } })));
-        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: ["Regal", "Waschmaschine", "Trockner"], roomNames: [] }]);
+        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: ["Regal", "Waschmaschine", "Trockner"], roomNames: [], wallCount: 0 }]);
         const ids = Object.values(result.plan.shapesByFloor).flat().map((s) => s.id);
         expect(ids).toEqual([uuid(4)]);
         expect(result.plan.shapesByFloor).not.toHaveProperty("kg");
@@ -291,7 +299,7 @@ describe("analyzePlanFile – rooms", () => {
     it("lists „Waschküche“ under the unknown floor „kg“ and does not take it over", () => {
         const kg = [room(5, "Waschküche")];
         const result = expectOk(analyze(file({ roomsByFloor: { eg: [], og: [], dg: [], kg } })));
-        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: [], roomNames: ["Waschküche"] }]);
+        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: [], roomNames: ["Waschküche"], wallCount: 0 }]);
         expect(result.plan.roomsByFloor).not.toHaveProperty("kg");
         expect(result.hasWarnings).toBe(true);
     });
@@ -305,7 +313,7 @@ describe("analyzePlanFile – rooms", () => {
                 }),
             ),
         );
-        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: ["Regal"], roomNames: ["Waschküche"] }]);
+        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: ["Regal"], roomNames: ["Waschküche"], wallCount: 0 }]);
     });
 
     it("gives a duplicate room id on another floor a new id and counts it", () => {
@@ -545,16 +553,16 @@ describe("analyzePlanFile – openings", () => {
         expect(result.hasWarnings).toBe(false);
     });
 
-    it("lists an opening of unknown kind from a newer version-12 file", () => {
+    it("lists an opening of unknown kind from a newer version-13 file", () => {
         const skylight = { ...win(3), kind: "dachfenster" };
         const wohnen = { ...room(1), openings: [door(2), skylight] };
-        const result = expectOk(analyze(file({ schemaVersion: 12, roomsByFloor: { eg: [wohnen], og: [], dg: [] } })));
+        const result = expectOk(analyze(file({ schemaVersion: 13, roomsByFloor: { eg: [wohnen], og: [], dg: [] } })));
         expect(result.relation).toBe("newer");
         expect(result.invalidOpenings).toEqual([
             { floorId: "eg", roomName: "Wohnen", label: "Tür oder Fenster", reason: "Art unbekannt" },
         ]);
         expect(result.plan.roomsByFloor.eg[0].openings).toEqual([door(2)]);
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
     });
 });
 
@@ -748,7 +756,7 @@ describe("analyzePlanFile – floors", () => {
         );
         expect(result.plan.floors).toHaveLength(8);
         expect(result.invalidFloors).toEqual([{ label: "Etage 9", reason: "Höchstens 8 Etagen" }]);
-        expect(result.unknownFloors).toEqual([{ floorId: "f9", names: ["Kiste"], roomNames: [] }]);
+        expect(result.unknownFloors).toEqual([{ floorId: "f9", names: ["Kiste"], roomNames: [], wallCount: 0 }]);
     });
 
     it("makes the file's first floor active when the active one is unknown", () => {
@@ -949,17 +957,17 @@ describe("applyImageCheck", () => {
 });
 
 describe("analyzePlanFile – versions", () => {
-    /** Test migration 10 → 11 that keeps a valid plan; it marks the name to prove it ran. */
+    /** Test migration 11 → 12 that keeps a valid plan; it marks the name to prove it ran. */
     const addMarker: PlanMigration = (data) => ({ ...data, name: `${String(data.name)} (umgewandelt)` });
 
     it("migrates an older file", () => {
-        const v10 = file({ schemaVersion: 10 });
-        const result = expectOk(analyze(v10, { appVersion: 11, migrations: { 10: addMarker } }, "umzug-entwurf.json"));
+        const v11 = file({ schemaVersion: 11 });
+        const result = expectOk(analyze(v11, { appVersion: 12, migrations: { 11: addMarker } }, "umzug-entwurf.json"));
         expect(result.relation).toBe("older");
-        expect(result.fileVersion).toBe(10);
-        expect(result.appVersion).toBe(11);
+        expect(result.fileVersion).toBe(11);
+        expect(result.appVersion).toBe(12);
         expect(result.plan.name).toBe("Umzug (umgewandelt)");
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
         expect(result.hasWarnings).toBe(true);
     });
 
@@ -997,15 +1005,15 @@ describe("analyzePlanFile – versions", () => {
     it("takes over what a newer file's version understands", () => {
         const slanted = { ...rect(99), kind: "schraege-wand", angleDeg: 30 };
         const eg = [...rects(1, 5).map((s) => ({ ...s, futureField: true })), slanted];
-        const result = expectOk(analyze(file({ schemaVersion: 12, shapesByFloor: { eg, og: [], dg: [] } }), {}, "neu.json"));
+        const result = expectOk(analyze(file({ schemaVersion: 13, shapesByFloor: { eg, og: [], dg: [] } }), {}, "neu.json"));
         expect(result.relation).toBe("newer");
-        expect(result.fileVersion).toBe(12);
-        expect(result.appVersion).toBe(11);
+        expect(result.fileVersion).toBe(13);
+        expect(result.appVersion).toBe(12);
         expect(result.countsByFloor.eg).toBe(5);
         expect(result.invalidShapes).toEqual([
             { floorId: "eg", name: "Form", reason: "Formtyp „schraege-wand“ unbekannt" },
         ]);
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
         expect(result.plan.shapesByFloor.eg[0]).not.toHaveProperty("futureField");
         expect(result.hasWarnings).toBe(true);
     });
@@ -1039,9 +1047,9 @@ describe("analyzePlanFile – room lock (Sperre eines Raums aus der Datei)", () 
         expect(result.hasWarnings).toBe(false);
     });
 
-    it("takes over a room without lock in a version-11 file not locked, without notice", () => {
+    it("takes over a room without lock in a file of the current version not locked, without notice", () => {
         const { locked: _l, ...withoutLock } = room(1);
-        const result = expectOk(analyze(file({ schemaVersion: 11, roomsByFloor: { eg: [withoutLock], og: [], dg: [] } })));
+        const result = expectOk(analyze(file({ roomsByFloor: { eg: [withoutLock], og: [], dg: [] } })));
         expect(result.relation).toBe("same");
         expect(result.plan.roomsByFloor.eg[0].locked).toBe(false);
         expect(result.invalidRooms).toEqual([]);
@@ -1194,5 +1202,61 @@ describe("readSettings", () => {
 
     it("gives the plan its own settings object", () => {
         expect(readSettings(undefined).settings).not.toBe(FACTORY_SETTINGS);
+    });
+});
+
+describe("analyzePlanFile – free walls (Wände aus der Datei)", () => {
+    it("takes over 3 walls on the ground floor and 1 upstairs in order (Wände werden übernommen)", () => {
+        const eg = [wall(1), wall(2, { x: 0, y: 0 }, { x: 0, y: 300 }), wall(3, { x: 50, y: 50 }, { x: 250, y: 50 }, 24)];
+        const result = expectOk(analyze(file({ wallsByFloor: { eg, og: [wall(4)], dg: [] } })));
+        expect(result.wallCount).toBe(4);
+        expect(result.plan.wallsByFloor.eg).toEqual(eg);
+        expect(result.plan.wallsByFloor.og).toEqual([wall(4)]);
+        expect(result.invalidWalls).toEqual([]);
+        expect(result.hasWarnings).toBe(false);
+    });
+
+    it("lists a wall without length with „Wand hat keine Länge“ and warns (Wand ohne Länge)", () => {
+        const zero = wall(1, { x: 100, y: 100 }, { x: 100, y: 100 });
+        const result = expectOk(analyze(file({ wallsByFloor: { eg: [zero, wall(2)], og: [], dg: [] } })));
+        expect(result.invalidWalls).toEqual([{ floorId: "eg", reason: "Wand hat keine Länge" }]);
+        expect(result.plan.wallsByFloor.eg).toEqual([wall(2)]);
+        expect(result.wallCount).toBe(1);
+        expect(result.hasWarnings).toBe(true);
+    });
+
+    it("names the reason for invalid points and thicknesses", () => {
+        const walls = [{ ...wall(1), endCm: { x: "x", y: 0 } }, wall(2, undefined, undefined, 120), "Wand", { ...wall(3), id: 5 }];
+        const result = expectOk(analyze(file({ wallsByFloor: { eg: walls, og: [], dg: [] } })));
+        expect(result.invalidWalls.map((w) => w.reason)).toEqual(["Punkte ungültig", "Dicke ungültig", "Angaben ungültig", "Angaben ungültig"]);
+    });
+
+    it("reports 2 walls under the unknown floor „kg“ and does not take them over (Wand unter unbekannter Etage)", () => {
+        const result = expectOk(analyze(file({ wallsByFloor: { eg: [], og: [], dg: [], kg: [wall(1), wall(2)] } })));
+        expect(result.unknownFloors).toEqual([{ floorId: "kg", names: [], roomNames: [], wallCount: 2 }]);
+        expect(result.plan.wallsByFloor).not.toHaveProperty("kg");
+        expect(result.hasWarnings).toBe(true);
+    });
+
+    it("gives a floor without wall list no walls, without notice (Fehlende Wandliste)", () => {
+        const result = expectOk(analyze(file({ wallsByFloor: { eg: [wall(1)], dg: [] } })));
+        expect(result.plan.wallsByFloor.og).toEqual([]);
+        expect(result.invalidWalls).toEqual([]);
+        expect(result.hasWarnings).toBe(false);
+    });
+
+    it("treats a missing or broken wallsByFloor as no walls and reports a list that is no array", () => {
+        const { wallsByFloor: _w, ...withoutWalls } = file();
+        expect(expectOk(analyze(withoutWalls)).plan.wallsByFloor).toEqual({ eg: [], og: [], dg: [] });
+        const broken = expectOk(analyze(file({ wallsByFloor: { eg: "Wand", og: [], dg: [] } })));
+        expect(broken.invalidWalls).toEqual([{ floorId: "eg", reason: "Angaben ungültig" }]);
+    });
+
+    it("gives a duplicate wall id a new id and counts it", () => {
+        const result = expectOk(analyze(file({ wallsByFloor: { eg: [wall(1)], og: [wall(1, { x: 0, y: 0 }, { x: 0, y: 99 })], dg: [] } })));
+        expect(result.reassignedWallIds).toBe(1);
+        expect(result.plan.wallsByFloor.eg[0].id).toBe(uuid(1));
+        expect(result.plan.wallsByFloor.og[0].id).not.toBe(uuid(1));
+        expect(result.hasWarnings).toBe(true);
     });
 });

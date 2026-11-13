@@ -3,7 +3,7 @@ import { Check, FileBraces, Minus, TriangleAlert } from "lucide-react";
 import { useLastValue } from "@/components/plan-file/useLastValue";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
-import { formatOpeningCount, formatPxPerCm, formatRoomCount, formatShapeCount } from "@/lib/format";
+import { formatOpeningCount, formatPxPerCm, formatRoomCount, formatShapeCount, formatWallCount } from "@/lib/format";
 import { planHasContent } from "@/lib/plan";
 import { COLOR_ISSUE_REASON, SETTINGS_ISSUE_REASON, WALL_ISSUE_REASON, type FilledMetadata, type ImportSuccess, type UnderlayIssue } from "@/lib/plan-import";
 import type { Floor, Plan, Underlay } from "@/lib/plan-schema";
@@ -64,11 +64,12 @@ function underlaySummary(underlay: Underlay | undefined): string {
     return `${image}, ${scale}`;
 }
 
-/** What of an unknown floor is not taken over: its shapes, then its rooms. */
-function unknownFloorDetails(names: readonly string[], roomNames: readonly string[]): string[] {
+/** What of an unknown floor is not taken over: its shapes, then its rooms, then its walls. */
+function unknownFloorDetails(names: readonly string[], roomNames: readonly string[], wallCount: number): string[] {
     const details: string[] = [];
     if (names.length > 0) details.push(`Werden nicht übernommen: ${names.join(", ")}`);
     if (roomNames.length > 0) details.push(`Räume werden nicht übernommen: ${roomNames.join(", ")}`);
+    if (wallCount > 0) details.push(`${formatWallCount(wallCount)} ${wallCount === 1 ? "wird" : "werden"} nicht übernommen`);
     return details.length > 0 ? details : ["Enthält keine Formen."];
 }
 
@@ -78,11 +79,13 @@ function ResultRows({ analysis }: { analysis: ImportSuccess }) {
         floors,
         countsByFloor,
         roomCountsByFloor,
+        wallCount,
         invalidFloors,
         unknownFloors,
         invalidShapes,
         invalidRooms,
         invalidOpenings,
+        invalidWalls,
         wallIssues,
         colorIssues,
         settingsIssues,
@@ -91,6 +94,7 @@ function ResultRows({ analysis }: { analysis: ImportSuccess }) {
         reassignedIds,
         reassignedRoomIds,
         reassignedOpeningIds,
+        reassignedWallIds,
         filledMetadata,
     } = analysis;
     const total = floors.reduce((sum, f) => sum + (countsByFloor[f.id] ?? 0), 0);
@@ -120,6 +124,13 @@ function ResultRows({ analysis }: { analysis: ImportSuccess }) {
                     details={[]}
                 />
             )}
+            {wallCount > 0 && (
+                <ResultRow
+                    tone="ok"
+                    title={`${formatWallCount(wallCount)} ${wallCount === 1 ? "wird" : "werden"} übernommen`}
+                    details={[]}
+                />
+            )}
             {withUnderlay.length > 0 ? (
                 <ResultRow
                     tone="ok"
@@ -140,14 +151,14 @@ function ResultRows({ analysis }: { analysis: ImportSuccess }) {
                     details={invalidFloors.map(({ label, reason }) => `„${label}“: ${reason}`)}
                 />
             )}
-            {unknownFloors.map(({ floorId, names, roomNames }) => (
+            {unknownFloors.map(({ floorId, names, roomNames, wallCount: unknownWalls }) => (
                 <ResultRow
                     key={floorId}
                     tone="warn"
                     title={`Unbekannte Etage „${floorId}“ – ${formatShapeCount(names.length)}${
                         roomNames.length > 0 ? `, ${formatRoomCount(roomNames.length)}` : ""
-                    }`}
-                    details={unknownFloorDetails(names, roomNames)}
+                    }${unknownWalls > 0 ? `, ${formatWallCount(unknownWalls)}` : ""}`}
+                    details={unknownFloorDetails(names, roomNames, unknownWalls)}
                 />
             ))}
             {invalidShapes.length > 0 && (
@@ -162,6 +173,13 @@ function ResultRows({ analysis }: { analysis: ImportSuccess }) {
                     tone="warn"
                     title={`${formatRoomCount(invalidRooms.length)} ungültig`}
                     details={invalidRooms.map(({ name, floorId, reason }) => `„${name}“ (${floorLabel(floors, floorId)}): ${reason}`)}
+                />
+            )}
+            {invalidWalls.length > 0 && (
+                <ResultRow
+                    tone="warn"
+                    title={`${formatWallCount(invalidWalls.length)} ungültig`}
+                    details={invalidWalls.map(({ floorId, reason }) => `Wand (${floorLabel(floors, floorId)}): ${reason}`)}
                 />
             )}
             {invalidOpenings.length > 0 && (
@@ -222,6 +240,17 @@ function ResultRows({ analysis }: { analysis: ImportSuccess }) {
                     title={`${formatRoomCount(reassignedRoomIds)} ${reassignedRoomIds === 1 ? "bekommt" : "bekommen"} eine neue ID`}
                     details={[
                         reassignedRoomIds === 1
+                            ? "Die ID kam in der Datei mehrfach vor."
+                            : "Ihre IDs kamen in der Datei mehrfach vor.",
+                    ]}
+                />
+            )}
+            {reassignedWallIds > 0 && (
+                <ResultRow
+                    tone="warn"
+                    title={`${formatWallCount(reassignedWallIds)} ${reassignedWallIds === 1 ? "bekommt" : "bekommen"} eine neue ID`}
+                    details={[
+                        reassignedWallIds === 1
                             ? "Die ID kam in der Datei mehrfach vor."
                             : "Ihre IDs kamen in der Datei mehrfach vor.",
                     ]}

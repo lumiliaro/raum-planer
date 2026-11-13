@@ -73,7 +73,7 @@ describe("savePlan / loadPlan", () => {
     it.each([
         ["broken JSON", "kaputt"],
         ["an invalid schema", JSON.stringify({ ...legacyPlan(CREATED), shapesByFloor: { eg: [] } })],
-        ["schemaVersion 12", JSON.stringify({ ...legacyPlan(CREATED), schemaVersion: 12 })],
+        ["schemaVersion 13", JSON.stringify({ ...legacyPlan(CREATED), schemaVersion: 13 })],
         ["a version-9 plan without settings", JSON.stringify({ ...legacyPlan(CREATED), settings: undefined })],
         ["schemaVersion 0", JSON.stringify({ ...legacyPlan(CREATED), schemaVersion: 0 })],
     ])("backs up %s unchanged and starts with an empty plan", (_, raw) => {
@@ -116,6 +116,7 @@ describe("savePlan / loadPlan", () => {
             "shapesByFloor",
             "underlayByFloor",
             "updatedAt",
+            "wallsByFloor",
         ]);
         expect(storage.getItem(PLAN_STORAGE_KEY)).not.toContain("propertiesPanel");
         expect(storage.getItem(PROPERTIES_PANEL_OPEN_KEY)).toBe("false");
@@ -129,7 +130,7 @@ describe("stored plan of version 1", () => {
         const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV1Text });
         const result = loadPlan(storage, NOW, newId);
         expect(result.outcome).toBe("migrated");
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
         expect(result.plan.floors.map((f) => [f.id, f.name])).toEqual([
             ["eg", "Erdgeschoss"],
             ["og", "Obergeschoss"],
@@ -173,11 +174,11 @@ describe("stored plan of version 1", () => {
 describe("stored plan of version 2", () => {
     const v2 = JSON.parse(planV2Text);
 
-    it("is migrated to version 11: underlays without image for eg/og/dg, shapes unchanged, raw text backed up", () => {
+    it("is migrated to version 12: underlays without image for eg/og/dg, shapes unchanged, raw text backed up", () => {
         const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV2Text });
         const result = loadPlan(storage, NOW, newId);
         expect(result.outcome).toBe("migrated");
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
         expect(result.plan.floors).toEqual(v2.floors);
         expect(result.plan.underlayByFloor).toEqual({
             eg: underlayWithoutImage(v2.calibrationByFloor.eg),
@@ -192,12 +193,13 @@ describe("stored plan of version 2", () => {
 describe("stored plan of version 3", () => {
     const v3 = JSON.parse(planV3Text);
 
-    it("is migrated to version 11: an empty room list per floor, the factory settings, everything else unchanged, raw text backed up", () => {
+    it("is migrated to version 12: an empty room list per floor, the factory settings, everything else unchanged, raw text backed up", () => {
         const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV3Text });
         const result = loadPlan(storage, NOW, newId);
         expect(result.outcome).toBe("migrated");
-        const { schemaVersion, roomsByFloor, settings, ...rest } = result.plan;
-        expect(schemaVersion).toBe(11);
+        const { schemaVersion, roomsByFloor, wallsByFloor, settings, ...rest } = result.plan;
+        expect(schemaVersion).toBe(12);
+        expect(wallsByFloor).toEqual(Object.fromEntries(v3.floors.map((f: { id: string }) => [f.id, []])));
         expect(settings).toEqual(FACTORY_SETTINGS);
         expect(roomsByFloor).toEqual(Object.fromEntries(v3.floors.map((f: { id: string }) => [f.id, []])));
         const { schemaVersion: _v, ...v3Rest } = v3;
@@ -207,12 +209,12 @@ describe("stored plan of version 3", () => {
 });
 
 describe("stored plan of version 4", () => {
-    it("is migrated to version 11: every room gets an empty list of openings and 15 cm walls, no color and no lock, raw text backed up", () => {
+    it("is migrated to version 12: every room gets an empty list of openings and 15 cm walls, no color and no lock, raw text backed up", () => {
         const v4 = JSON.parse(planV4Text);
         const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV4Text });
         const result = loadPlan(storage, NOW, newId);
         expect(result.outcome).toBe("migrated");
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
         for (const floor of v4.floors as { id: string }[]) {
             expect(result.plan.roomsByFloor[floor.id]).toEqual(
                 v4.roomsByFloor[floor.id].map((r: { pointsCm: unknown[] }) => ({
@@ -230,12 +232,12 @@ describe("stored plan of version 4", () => {
 });
 
 describe("stored plan of version 10 (Gespeicherter Plan der Version 10)", () => {
-    it("is migrated to version 11: every room unchanged and not locked, raw text backed up", () => {
+    it("is migrated to version 12: every room unchanged and not locked, raw text backed up", () => {
         const v10 = JSON.parse(planV10Text);
         const storage = memoryStorage({ [PLAN_STORAGE_KEY]: planV10Text });
         const result = loadPlan(storage, NOW, newId);
         expect(result.outcome).toBe("migrated");
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(12);
         for (const floor of v10.floors as { id: string }[]) {
             expect(result.plan.roomsByFloor[floor.id]).toEqual(
                 v10.roomsByFloor[floor.id].map((r: object) => ({ ...r, locked: false })),

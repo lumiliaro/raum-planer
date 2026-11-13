@@ -69,7 +69,7 @@ const underlay: Underlay = {
 function plan(floors: Array<{ name: string; rooms?: Room[]; shapes?: Shape[]; underlay?: Underlay }>): Plan {
     const ids = floors.map(() => crypto.randomUUID());
     return {
-        schemaVersion: 11,
+        schemaVersion: 12,
         name: "Umzug",
         createdAt: "2026-11-12T00:00:00.000Z",
         updatedAt: "2026-11-12T00:00:00.000Z",
@@ -78,12 +78,14 @@ function plan(floors: Array<{ name: string; rooms?: Room[]; shapes?: Shape[]; un
         underlayByFloor: Object.fromEntries(floors.flatMap((f, i) => (f.underlay ? [[ids[i], f.underlay]] : []))),
         roomsByFloor: Object.fromEntries(floors.map((f, i) => [ids[i], f.rooms ?? []])),
         shapesByFloor: Object.fromEntries(floors.map((f, i) => [ids[i], f.shapes ?? []])),
+        wallsByFloor: Object.fromEntries(floors.map((_, i) => [ids[i], []])),
         settings: { ...FACTORY_SETTINGS },
     } as Plan;
 }
 
 const content = (c: Partial<PrintFloorContent>): PrintFloorContent => ({
     rooms: [],
+    walls: [],
     shapes: [],
     underlay: undefined,
     imageAvailable: false,
@@ -145,6 +147,16 @@ describe("printContentBounds", () => {
         expect(printContentBounds(c, { furniture: true, underlay: true })!.width).toBe(2015);
         expect(printContentBounds(c, { furniture: true, underlay: false })!.width).toBe(430);
         expect(printContentBounds({ ...c, imageAvailable: false }, { furniture: true, underlay: true })!.width).toBe(430);
+    });
+
+    it("contains a floor with only a free wall, with its thickness", () => {
+        const walls = [{ id: crypto.randomUUID(), startCm: { x: 0, y: 0 }, endCm: { x: 0, y: 300 }, thicknessCm: 11.5 }];
+        expect(printContentBounds(content({ walls }), { furniture: false, underlay: false })).toEqual({
+            x: -5.75,
+            y: 0,
+            width: 11.5,
+            height: 300,
+        });
     });
 
     it("is null for an empty floor, also with furniture or underlay switched off", () => {

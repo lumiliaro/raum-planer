@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { edgeFrame } from "@/lib/opening-geometry";
 import { toggleFullEdge } from "@/lib/opening-fields";
-import { addFloor, addOpening, addRoom, addShape, createEmptyPlan, moveFloor, removeFloor, setUnderlay, updateOpening } from "@/lib/plan";
+import { addFloor, addOpening, addRoom, addShape, addWall, createEmptyPlan, moveFloor, removeFloor, setUnderlay, updateOpening } from "@/lib/plan";
 import { analyzePlanFile } from "@/lib/plan-import";
 import {
     buildExportFile,
@@ -11,7 +11,7 @@ import {
     serializeExport,
 } from "@/lib/plan-export";
 import type { Opening, Plan } from "@/lib/plan-schema";
-import { CAL_EG, imageId, legacyPlan, rect, rectPoints, room, underlay, uuid } from "@/test/plan-fixtures";
+import { CAL_EG, imageId, legacyPlan, rect, rectPoints, room, underlay, uuid, wall } from "@/test/plan-fixtures";
 
 const NOW = new Date("2026-11-11T10:00:00.000Z");
 
@@ -31,7 +31,7 @@ const planWithShapes = () => {
 describe("serializeExport", () => {
     it("is indented and ends with a line break", () => {
         const text = serializePlan(legacyPlan(NOW));
-        expect(text).toContain('\n  "schemaVersion": 11,\n');
+        expect(text).toContain('\n  "schemaVersion": 12,\n');
         expect(text.endsWith("}\n")).toBe(true);
     });
 
@@ -54,8 +54,9 @@ describe("serializeExport", () => {
             "shapesByFloor",
             "underlayByFloor",
             "updatedAt",
+            "wallsByFloor",
         ]);
-        expect(parsed.schemaVersion).toBe(11);
+        expect(parsed.schemaVersion).toBe(12);
     });
 
     it("contains the ground floor's room „Wohnen“ with its four corners, and empty room lists", () => {
@@ -155,9 +156,9 @@ describe("buildExportFile", () => {
         expect(plan).toEqual(before);
     });
 
-    it("contains version 11 and the floors, but no view state", () => {
+    it("contains version 12 and the floors, but no view state", () => {
         const file = buildExportFile(withUnderlays(), images);
-        expect(file.schemaVersion).toBe(11);
+        expect(file.schemaVersion).toBe(12);
         expect(file.floors).toEqual(legacyPlan(NOW).floors);
         const text = serializeExport(file);
         for (const key of ["viewports", "scale", "propertiesPanel", "exportCounter", "imageAvailability"]) {
@@ -217,6 +218,20 @@ describe("room lock in the export file", () => {
             ["Wohnen", true],
             ["Flur", false],
         ]);
+    });
+});
+
+describe("free walls in the export file", () => {
+    it("keeps walls with their points and thicknesses on a round trip export → import without warning", () => {
+        let plan = addWall(createEmptyPlan(NOW, () => "eg"), "eg", wall(1), NOW);
+        plan = addWall(plan, "eg", wall(2, { x: 0, y: 0 }, { x: 0, y: 237.5 }, 11.5), NOW);
+        const text = serializePlan(plan);
+        expect(JSON.parse(text).wallsByFloor.eg).toHaveLength(2);
+        const result = analyzePlanFile(text, "export.json", { now: NOW, newId: () => crypto.randomUUID() });
+        if (!result.ok) throw new Error(result.error);
+        expect(result.hasWarnings).toBe(false);
+        expect(result.wallCount).toBe(2);
+        expect(result.plan.wallsByFloor).toEqual(plan.wallsByFloor);
     });
 });
 

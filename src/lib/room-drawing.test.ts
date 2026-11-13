@@ -307,16 +307,14 @@ const room = (id: string, points: PointCm[], thickness: number | number[] = 15):
 /** „Wohnen“: 500 cm × 400 cm, clockwise on screen, 15 cm walls. */
 const WOHNEN = room("wohnen", pts([0, 0], [500, 0], [500, 400], [0, 400]));
 const line = (lines: WallLine[], edgeIndex: number, face: "inner" | "outer") =>
-    lines.find((l) => l.edgeIndex === edgeIndex && l.face === face)!;
+    lines.find((l) => l.source.kind === "room" && l.source.edgeIndex === edgeIndex && l.source.face === face)!;
 
 describe("wallLines", () => {
     it("gives the inner and outer line of each edge; the top outer line runs at y = −15 cm", () => {
         const lines = wallLines([WOHNEN]);
         expect(lines).toHaveLength(8);
         expect(line(lines, 0, "inner")).toEqual({
-            roomId: "wohnen",
-            edgeIndex: 0,
-            face: "inner",
+            source: { kind: "room", roomId: "wohnen", edgeIndex: 0, face: "inner" },
             start: { x: 0, y: 0 },
             end: { x: 500, y: 0 },
             lengthCm: 500,
@@ -328,8 +326,8 @@ describe("wallLines", () => {
 
     it("puts the outer side outside for a counter-clockwise room too", () => {
         const ccw = room("ccw", pts([0, 0], [0, 400], [500, 400], [500, 0]));
-        const top = wallLines([ccw]).find((l) => l.face === "outer" && l.start.y < 0)!;
-        expect(top).toMatchObject({ edgeIndex: 3, start: { x: 500, y: -15 }, end: { x: 0, y: -15 } });
+        const top = wallLines([ccw]).find((l) => l.source.kind === "room" && l.source.face === "outer" && l.start.y < 0)!;
+        expect(top).toMatchObject({ source: { edgeIndex: 3 }, start: { x: 500, y: -15 }, end: { x: 0, y: -15 } });
     });
 
     it("moves each edge by its own wall thickness", () => {
@@ -341,7 +339,7 @@ describe("wallLines", () => {
 
     it("leaves out edges of 0 cm", () => {
         const lines = wallLines([room("z", pts([0, 0], [500, 0], [500, 0], [500, 400], [0, 400]))]);
-        expect(lines.map((l) => l.edgeIndex)).not.toContain(1);
+        expect(lines.map((l) => (l.source.kind === "room" ? l.source.edgeIndex : -1))).not.toContain(1);
         expect(lines).toHaveLength(8);
     });
 });
@@ -352,7 +350,7 @@ describe("snapToWall", () => {
 
     it("snaps (262 cm, −17 cm) to (260 cm, −15 cm) on the outer side, 240 cm from the nearer right end", () => {
         expect(snap(262, -17)).toMatchObject({
-            line: { edgeIndex: 0, face: "outer" },
+            line: { source: { edgeIndex: 0, face: "outer" } },
             fromEnd: "end",
             offsetCm: 240,
             point: { x: 260, y: -15 },
@@ -361,7 +359,7 @@ describe("snapToWall", () => {
     });
 
     it("snaps (262 cm, 4 cm) to (260 cm, 0 cm) on the inner side", () => {
-        expect(snap(262, 4)).toMatchObject({ line: { edgeIndex: 0, face: "inner" }, point: { x: 260, y: 0 } });
+        expect(snap(262, 4)).toMatchObject({ line: { source: { edgeIndex: 0, face: "inner" } }, point: { x: 260, y: 0 } });
     });
 
     it("counts from the nearer end: (437 cm, −14 cm) → (435 cm, −15 cm), 65 cm from the right end", () => {
@@ -387,8 +385,8 @@ describe("snapToWall", () => {
     it("takes the nearest of two lines", () => {
         // A 6-cm wall: both sides are within reach; the nearer one wins.
         const thin = wallLines([room("t", pts([0, 0], [500, 0], [500, 400], [0, 400]), 6)]);
-        expect(snapToWall(p(100, -4), thin, { radiusCm: 8, stepCm: 5 })).toMatchObject({ line: { face: "outer" } });
-        expect(snapToWall(p(100, -2), thin, { radiusCm: 8, stepCm: 5 })).toMatchObject({ line: { face: "inner" } });
+        expect(snapToWall(p(100, -4), thin, { radiusCm: 8, stepCm: 5 })).toMatchObject({ line: { source: { face: "outer" } } });
+        expect(snapToWall(p(100, -2), thin, { radiusCm: 8, stepCm: 5 })).toMatchObject({ line: { source: { face: "inner" } } });
     });
 
     it("keeps the point on the line", () => {
