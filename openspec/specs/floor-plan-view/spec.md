@@ -47,7 +47,7 @@ Die Zeichenfläche SHALL in cm arbeiten: Ein Zoomwert von 100 % MUST 1 Bildschir
 - **THEN** ist es 100 × 60 Bildschirmpixel groß
 
 ### Requirement: Einpassen
-Das System SHALL bei der ersten Anzeige einer Etage alles Sichtbare der Etage (Vorlage und Formen) vollständig und zentriert in die Zeichenfläche einpassen. Ist nichts zu sehen, MUST der Bereich von 0 cm bis 1 000 cm in beiden Richtungen eingepasst werden. Dieselbe Einpassung SHALL über die Schaltfläche „Einpassen“ und die Taste `0` erreichbar sein.
+Das System SHALL bei der ersten Anzeige einer Etage alles Sichtbare der Etage (Vorlage, Räume samt Wandband, freie Wände und Formen) vollständig und zentriert in die Zeichenfläche einpassen. Ist nichts zu sehen, MUST der Bereich von 0 cm bis 1 000 cm in beiden Richtungen eingepasst werden. Dieselbe Einpassung SHALL über die Schaltfläche „Einpassen“ und die Taste `0` erreichbar sein.
 
 #### Scenario: Erste Anzeige
 - **WHEN** eine Etage mit Vorlage in der Sitzung zum ersten Mal angezeigt wird
@@ -67,6 +67,11 @@ Das System SHALL bei der ersten Anzeige einer Etage alles Sichtbare der Etage (V
 - **GIVEN** die Etage „Keller“ hat weder Vorlage noch Formen
 - **WHEN** der Nutzer „Einpassen“ anklickt
 - **THEN** ist der Bereich von 0 cm bis 1 000 cm in beiden Richtungen sichtbar und zentriert
+
+#### Scenario: Nur eine freie Wand
+- **GIVEN** die Etage „Keller“ hat nur eine Wand von (2 000 cm, 0 cm) nach (2 000 cm, 600 cm) mit 24 cm Dicke
+- **WHEN** der Nutzer „Einpassen“ anklickt
+- **THEN** ist die ganze Wand samt ihrer Dicke sichtbar und zentriert
 
 ### Requirement: Zoomen mit dem Mausrad
 Das System SHALL beim Drehen des Mausrads über der Zeichenfläche zoomen, wobei der Bildpunkt unter dem Mauszeiger an derselben Bildschirmposition bleibt. Das Mausrad MUST dabei nicht die Seite scrollen.
