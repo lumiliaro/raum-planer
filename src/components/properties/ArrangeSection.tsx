@@ -1,5 +1,6 @@
 import { ArrowDownToLine, ArrowUpToLine, BringToFront, SendToBack, type LucideIcon } from "lucide-react";
 import { PropertySection } from "@/components/properties/PropertySection";
+import { formatKeys } from "@/lib/key-labels";
 import { canReorder, type ReorderDirection } from "@/lib/plan";
 import type { Shape } from "@/lib/plan-schema";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ export function ArrangeSection({ shape }: { shape: Shape }) {
                             type="button"
                             aria-disabled={!enabled || undefined}
                             aria-keyshortcuts={shortcut}
-                            title={`${label} (${key})`}
+                            title={`${label} (${formatKeys(key)})`}
                             onClick={enabled ? () => reorderShape(floorId, shape.id, direction) : undefined}
                             className={cn(
                                 "inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2 text-[13px] font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",

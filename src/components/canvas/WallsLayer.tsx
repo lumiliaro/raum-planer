@@ -4,7 +4,7 @@ import { Circle, Group, Layer, Line } from "react-konva";
 import { DIMENSION_GAP_PX, DIMENSION_HEIGHT_PX } from "@/components/canvas/dimension-measure";
 import { DimensionText } from "@/components/canvas/DimensionText";
 import { ROOM_LABEL_COLOR, SELECTION_COLOR } from "@/components/canvas/canvas-style";
-import { useAltKeyRef, useCtrlKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
+import { useAltKeyRef, useSnapOffKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
 import { readableRotationDeg } from "@/lib/dimensions";
 import { formatCm } from "@/lib/format";
 import type { FloorId, PointCm, Room, Wall } from "@/lib/plan-schema";
@@ -58,7 +58,7 @@ interface WallsLayerProps {
  * a blue outline and a handle at each end. Dragging the selected wall moves
  * it in 5-cm steps (1 cm with Alt); dragging a handle moves only that end and
  * snaps it like the end point while drawing (`resolveWallPointer` from the
- * other end; Shift: free angle, Ctrl or „Einrasten“ off: no guides and wall
+ * other end; Shift: free angle, Strg (Apple: ⌘) or „Einrasten“ off: no guides and wall
  * lines), showing guides, a ring and the length. The plan changes on release.
  */
 export function WallsLayer({ floorId, scale }: WallsLayerProps) {
@@ -70,7 +70,7 @@ export function WallsLayer({ floorId, scale }: WallsLayerProps) {
     const selecting = useAppStore((s) => s.activeTool === "select");
     const altRef = useAltKeyRef();
     const shiftRef = useShiftKeyRef();
-    const ctrlRef = useCtrlKeyRef();
+    const snapOffRef = useSnapOffKeyRef();
     const [endDrag, setEndDrag] = useState<EndDrag | null>(null);
 
     // A dragged end shows where it will land; the corner caps follow it.
@@ -104,7 +104,7 @@ export function WallsLayer({ floorId, scale }: WallsLayerProps) {
                     onEndDrag={setEndDrag}
                     altRef={altRef}
                     shiftRef={shiftRef}
-                    ctrlRef={ctrlRef}
+                    snapOffRef={snapOffRef}
                 />
             ))}
         </Layer>
@@ -131,7 +131,7 @@ interface WallNodeProps {
     onEndDrag: (drag: EndDrag | null) => void;
     altRef: RefObject<boolean>;
     shiftRef: RefObject<boolean>;
-    ctrlRef: RefObject<boolean>;
+    snapOffRef: RefObject<boolean>;
 }
 
 interface MoveStart {
@@ -161,7 +161,7 @@ function WallNode({
     onEndDrag,
     altRef,
     shiftRef,
-    ctrlRef,
+    snapOffRef,
 }: WallNodeProps) {
     const moveWall = useAppStore((s) => s.moveWall);
     const updateWall = useAppStore((s) => s.updateWall);
@@ -220,7 +220,7 @@ function WallNode({
         const resolved = resolveWallPointer(fixed, pointer, wallSnapTargets(rooms, walls, wall.id), {
             radiusCm: CORNER_SNAP_RADIUS_PX * px,
             free: !!shiftRef.current,
-            snap: snapping && !ctrlRef.current,
+            snap: snapping && !snapOffRef.current,
             stepCm: snapStepCm(altRef.current, settings),
         });
         const point = resolved.point;

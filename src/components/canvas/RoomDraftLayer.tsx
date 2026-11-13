@@ -31,6 +31,7 @@ import {
 import { distanceCm, GEOMETRY_EPS_CM, MIN_EDGE_CM } from "@/lib/room-geometry";
 import { draftTargets, resolveWallPointer, type DraftTool } from "@/lib/wall-drawing";
 import { wallBandOutline } from "@/lib/wall-geometry";
+import { SNAP_OFF_KEY, snapOffHeld } from "@/lib/platform";
 import { snapStepCm } from "@/lib/snap";
 import type { Point } from "@/lib/viewport";
 import { selectSettings, useAppStore, type RoomDraft } from "@/store/app-store";
@@ -46,8 +47,8 @@ interface DraftPointerState {
     screen: Point | null;
     /** Shift held: free angle instead of 0°/90°/180°/270°. */
     shift: boolean;
-    /** Ctrl held: no snapping to guides or wall lines. */
-    ctrl: boolean;
+    /** Strg (Apple: ⌘) held: no snapping to guides or wall lines. */
+    snapOff: boolean;
     /** Alt held: fine steps along a wall line. */
     alt: boolean;
 }
@@ -56,7 +57,7 @@ const useDraftPointer = create<DraftPointerState>()(() => ({
     cm: null,
     screen: null,
     shift: false,
-    ctrl: false,
+    snapOff: false,
     alt: false,
 }));
 
@@ -158,7 +159,7 @@ function previewFor(
     }
     if (tool === "wall") {
         const start = points[0] ?? null;
-        const snapOn = snapping && !pointer.ctrl;
+        const snapOn = snapping && !pointer.snapOff;
         const resolved = resolveWallPointer(
             start,
             pointer.cm,
@@ -172,8 +173,8 @@ function previewFor(
     const resolved = resolveDraftPointer(points, pointer.cm, roomCorners, {
         radiusCm: CORNER_SNAP_RADIUS_PX / scale,
         free: pointer.shift,
-        guides: snapping && !pointer.ctrl,
-        walls: snapping && !pointer.ctrl ? walls : null,
+        guides: snapping && !pointer.snapOff,
+        walls: snapping && !pointer.snapOff ? walls : null,
         stepCm: snapStepCm(pointer.alt, settings),
     });
     if (!resolved.point) return null;
@@ -232,7 +233,7 @@ export function RoomDraftLayer({ floorId, tool, scale }: RoomDraftLayerProps) {
     const roomCorners = targets.corners;
     const walls = targets.lines;
 
-    // Track the pointer on the stage; Shift, Ctrl and Alt also change the preview without moving the mouse.
+    // Track the pointer on the stage; Shift, Strg/⌘ and Alt also change the preview without moving the mouse.
     useEffect(() => {
         const stage = layerRef.current?.getStage();
         if (!stage) return;
@@ -241,14 +242,14 @@ export function RoomDraftLayer({ floorId, tool, scale }: RoomDraftLayerProps) {
                 cm: stage.getRelativePointerPosition(),
                 screen: stage.getPointerPosition(),
                 shift: e.evt.shiftKey,
-                ctrl: e.evt.ctrlKey,
+                snapOff: snapOffHeld(e.evt),
                 alt: e.evt.altKey,
             });
         };
         const onLeave = () => useDraftPointer.setState({ cm: null, screen: null });
         const onModifier = (e: KeyboardEvent) => {
             if (e.key === "Shift") useDraftPointer.setState({ shift: e.type === "keydown" });
-            else if (e.key === "Control") useDraftPointer.setState({ ctrl: e.type === "keydown" });
+            else if (e.key === SNAP_OFF_KEY) useDraftPointer.setState({ snapOff: e.type === "keydown" });
             else if (e.key === "Alt") useDraftPointer.setState({ alt: e.type === "keydown" });
         };
         stage.on("mousemove.roomDraft", onMove);
@@ -259,7 +260,7 @@ export function RoomDraftLayer({ floorId, tool, scale }: RoomDraftLayerProps) {
             stage.off(".roomDraft");
             window.removeEventListener("keydown", onModifier);
             window.removeEventListener("keyup", onModifier);
-            useDraftPointer.setState({ cm: null, screen: null, shift: false, ctrl: false, alt: false });
+            useDraftPointer.setState({ cm: null, screen: null, shift: false, snapOff: false, alt: false });
         };
     }, []);
 

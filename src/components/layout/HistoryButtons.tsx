@@ -1,9 +1,10 @@
 import { Redo2, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { formatAriaShortcuts, formatKeys } from "@/lib/key-labels";
 import { cn } from "@/lib/utils";
 import { useAppStore, useCanRedo, useCanUndo } from "@/store/app-store";
 
-/** „Rückgängig“ and „Wiederholen“ in the header; locked while there is no step. */
+/** „Rückgängig“ and „Wiederholen“ in the header; locked while there is no step. Keys in this device's notation. */
 export function HistoryButtons() {
     const undo = useAppStore((s) => s.undo);
     const redo = useAppStore((s) => s.redo);
@@ -12,13 +13,19 @@ export function HistoryButtons() {
 
     return (
         <div className="flex items-center gap-1">
-            <HistoryButton label="Rückgängig" title="Rückgängig (Strg+Z)" shortcut="Control+Z" enabled={canUndo} onClick={undo}>
+            <HistoryButton
+                label="Rückgängig"
+                title={`Rückgängig (${formatKeys("Strg+Z")})`}
+                shortcut={formatAriaShortcuts("Control+Z")}
+                enabled={canUndo}
+                onClick={undo}
+            >
                 <Undo2 aria-hidden="true" />
             </HistoryButton>
             <HistoryButton
                 label="Wiederholen"
-                title="Wiederholen (Strg+Umschalt+Z)"
-                shortcut="Control+Shift+Z Control+Y"
+                title={`Wiederholen (${formatKeys("Strg+Umschalt+Z")})`}
+                shortcut={formatAriaShortcuts("Control+Shift+Z Control+Y")}
                 enabled={canRedo}
                 onClick={redo}
             >

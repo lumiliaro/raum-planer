@@ -16,6 +16,8 @@ export interface ShortcutGroup {
  * This is a description, not generated from the key handlers
  * (`useShapeShortcuts`, `FloorCanvas`, `RoomDraftLayer`, the drag modifiers):
  * a new key there must be added here too. Only „Werkzeuge“ comes from `TOOLS`.
+ * Keys are written the Windows way (Strg, Umschalt, Alt); `HelpDialog` shows
+ * them with ⌘, ⇧ and ⌥ on Apple devices via `formatKeys` (`@/lib/key-labels`).
  */
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     {
