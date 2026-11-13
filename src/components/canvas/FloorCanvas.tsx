@@ -20,6 +20,7 @@ import { EDGE_HIT_TOLERANCE_PX, nearestRoomEdge, newOpeningSnap } from "@/lib/op
 import { SNAP_POINT_TOLERANCE_PX } from "@/lib/opening-snap";
 import type { PointCm } from "@/lib/plan-schema";
 import { CORNER_SNAP_RADIUS_PX, resolveDraftPointer, wallLines } from "@/lib/room-drawing";
+import { snapOffHeld } from "@/lib/platform";
 import { snapStepCm } from "@/lib/snap";
 import { resolveWallPointer, wallSnapTargets } from "@/lib/wall-drawing";
 import { cmToImagePoint } from "@/lib/underlay";
@@ -124,6 +125,21 @@ export function FloorCanvas() {
         return () => container.removeEventListener("wheel", onWheel);
     }, [container]);
 
+    // A press on the drawing (mouse, pen or finger) leaves a focused text field, committing its text on blur,
+    // before Konva selects or drags. A mouse press does that in the browser already; a touch on a Konva shape
+    // does not (Konva prevents the default of `touchstart`), so on an iPad the shortcuts would keep going to the
+    // field. Capture phase: before Konva's handlers. Only the canvas itself, not the zoom buttons above it.
+    useEffect(() => {
+        if (!container) return;
+        const onPointerDown = (e: PointerEvent) => {
+            if (!(e.target instanceof HTMLCanvasElement)) return;
+            const focused = document.activeElement;
+            if (focused instanceof HTMLElement && isEditableTarget(focused) && !isInDialog(focused)) focused.blur();
+        };
+        container.addEventListener("pointerdown", onPointerDown, { capture: true });
+        return () => container.removeEventListener("pointerdown", onPointerDown, { capture: true });
+    }, [container]);
+
     // Keyboard shortcuts: + / = zoom in, - zoom out, 0 fit. New keys must also be added to `components/help/shortcuts.ts`.
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -167,12 +183,12 @@ export function FloorCanvas() {
         } else if (activeTool === "room") {
             // Next corner: a corner nearby wins, then (first corner only) a wall position (Alt: fine steps),
             // else the edge in the snapped direction (Shift: free), then guides through other corners
-            // („Einrasten“ on, Ctrl not held). Same as the preview; an open field „Abstand“ is replaced.
+            // („Einrasten“ on, Strg/⌘ not held). Same as the preview; an open field „Abstand“ is replaced.
             if (!pt || !vp) return;
             const { roomDraft } = useAppStore.getState();
             const corners = rooms.flatMap((room) => room.pointsCm);
             const radiusCm = CORNER_SNAP_RADIUS_PX / vp.scale;
-            const snapOn = shapeSnapping && !e.evt.ctrlKey;
+            const snapOn = shapeSnapping && !snapOffHeld(e.evt);
             const next = resolveDraftPointer(roomDraft?.points ?? [], pt, corners, {
                 radiusCm,
                 free: e.evt.shiftKey,
@@ -191,7 +207,7 @@ export function FloorCanvas() {
             const next = resolveWallPointer(start, pt, wallSnapTargets(rooms, freeWalls), {
                 radiusCm: CORNER_SNAP_RADIUS_PX / vp.scale,
                 free: e.evt.shiftKey,
-                snap: shapeSnapping && !e.evt.ctrlKey,
+                snap: shapeSnapping && !snapOffHeld(e.evt),
                 stepCm: snapStepCm(e.evt.altKey, settings),
             });
             if (next.point) addDraftPoint(next.point);

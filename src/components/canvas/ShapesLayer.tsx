@@ -4,7 +4,7 @@ import { SELECTION_COLOR } from "@/components/canvas/canvas-style";
 import { SelectionTransformer } from "@/components/canvas/SelectionTransformer";
 import { ShapeNode, type SnapGuides } from "@/components/canvas/ShapeNode";
 import type { FloorId, Room } from "@/lib/plan-schema";
-import { useAltKeyRef, useCtrlKeyRef } from "@/hooks/useModifierKeyRef";
+import { useAltKeyRef, useSnapOffKeyRef } from "@/hooks/useModifierKeyRef";
 import { getOutlineCm } from "@/lib/outline";
 import { shapeIdsInRoom } from "@/lib/room-geometry";
 import { selectSelectedShape, useAppStore } from "@/store/app-store";
@@ -44,7 +44,7 @@ export function ShapesLayer({ floorId, scale }: ShapesLayerProps) {
     const selecting = useAppStore((s) => s.activeTool === "select");
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId] ?? NO_ROOMS);
     const altRef = useAltKeyRef();
-    const ctrlRef = useCtrlKeyRef();
+    const snapOffRef = useSnapOffKeyRef();
     const [guides, setGuides] = useState<SnapGuides | null>(null);
     const showDimensions = useAppStore((s) => s.showDimensions);
     const snapping = useAppStore((s) => s.shapeSnapping);
@@ -84,7 +84,7 @@ export function ShapesLayer({ floorId, scale }: ShapesLayerProps) {
                     showDimensions={showDimensions}
                     altRef={altRef}
                     snapping={snapping}
-                    ctrlRef={ctrlRef}
+                    snapOffRef={snapOffRef}
                     rooms={rooms}
                     shapes={shapes}
                     onSnapGuides={setGuides}

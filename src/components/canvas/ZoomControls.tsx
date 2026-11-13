@@ -50,7 +50,7 @@ export function ZoomControls({
             >
                 <Ruler />
             </ZoomButton>
-            {/* For touch devices: without a keyboard, Ctrl cannot be held to drag a shape freely. */}
+            {/* For touch devices: without a keyboard, Strg/⌘ cannot be held to drag a shape freely. */}
             <ZoomButton
                 label={shapeSnapping ? "Einrasten ausschalten" : "Einrasten einschalten"}
                 title={

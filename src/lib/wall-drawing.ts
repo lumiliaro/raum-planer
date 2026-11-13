@@ -97,7 +97,7 @@ export interface WallPointerOptions {
     radiusCm: number;
     /** Shift: free angle instead of 0°/90°/180°/270°. */
     free: boolean;
-    /** Snap to guides and wall lines („Einrasten“ on and Ctrl not held). */
+    /** Snap to guides and wall lines („Einrasten“ on and Strg/⌘ not held). */
     snap: boolean;
     /** Step along a wall line for the start point in cm (fine step while Alt is held). */
     stepCm: number;

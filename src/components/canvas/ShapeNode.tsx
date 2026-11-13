@@ -43,8 +43,8 @@ interface ShapeNodeProps {
     altRef: RefObject<boolean>;
     /** „Einrasten“ switch: `false` = no snapping to snap lines, only the grid. */
     snapping: boolean;
-    /** Ctrl held: no snapping to snap lines, only the grid. */
-    ctrlRef: RefObject<boolean>;
+    /** Strg (Apple: ⌘) held: no snapping to snap lines, only the grid. */
+    snapOffRef: RefObject<boolean>;
     /** Rooms of the floor; the one under the dragged center gives the snap lines. */
     rooms: readonly Room[];
     /** All shapes of the floor; those in the same room are snap targets. */
@@ -96,7 +96,7 @@ function shapeExtent(shape: Shape): Record<SnapAxis, ShapeExtent> | null {
  * 5-cm steps (1 cm with Alt); the plan changes only on release. Per axis, a snap line of the room under the
  * unsnapped center (room center, opening middles, walls, other shapes in the room; `roomSnapLines`) within
  * `SHAPE_SNAP_TOLERANCE_PX` screen pixels takes precedence over the grid (`snapShapeMove`); the lines hit are
- * reported via `onSnapGuides`. With the „Einrasten“ switch off, Ctrl held, outside every room or without outline only the grid applies. While the
+ * reported via `onSnapGuides`. With the „Einrasten“ switch off, Strg (Apple: ⌘) held, outside every room or without outline only the grid applies. While the
  * room the shape lies in is dragged, `previewOffsetCm` draws it moved along;
  * on release the plan carries the move, so the shape does not jump.
  * While the transformer scales or rotates the shape, its dimensions are hidden;
@@ -111,7 +111,7 @@ export function ShapeNode({
     showDimensions,
     altRef,
     snapping,
-    ctrlRef,
+    snapOffRef,
     rooms,
     shapes,
     onSnapGuides,
@@ -169,7 +169,7 @@ export function ShapeNode({
         const drag = dragRef.current;
         const step = snapStepCm(altRef.current, settings);
         const rawCm = { x: (pos.x - drag.abs.x) * cmPerScreenPx, y: (pos.y - drag.abs.y) * cmPerScreenPx };
-        const room = !snapping || ctrlRef.current || !extent ? null : roomAtPoint(rooms, { x: shape.x + rawCm.x, y: shape.y + rawCm.y });
+        const room = !snapping || snapOffRef.current || !extent ? null : roomAtPoint(rooms, { x: shape.x + rawCm.x, y: shape.y + rawCm.y });
         let snappedCm: PointCm;
         if (room && extent) {
             const result = snapShapeMove({

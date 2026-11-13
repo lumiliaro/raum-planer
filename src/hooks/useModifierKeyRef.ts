@@ -1,16 +1,21 @@
 import { useEffect, useRef, type RefObject } from "react";
+import { snapOffHeld } from "@/lib/platform";
 
-type ModifierKey = "altKey" | "shiftKey" | "ctrlKey";
+type ModifierState = Pick<KeyboardEvent, "altKey" | "shiftKey" | "ctrlKey" | "metaKey">;
+
+const readAlt = (e: ModifierState) => e.altKey;
+const readShift = (e: ModifierState) => e.shiftKey;
+const readSnapOff = (e: ModifierState) => snapOffHeld(e);
 
 /**
  * Whether a modifier key is currently held, kept in a ref for Konva callbacks
- * that get no event (`dragBoundFunc`, `boundBoxFunc`).
+ * that get no event (`dragBoundFunc`, `boundBoxFunc`). `read` must be a stable function.
  */
-function useModifierKeyRef(key: ModifierKey): RefObject<boolean> {
+function useModifierKeyRef(read: (e: ModifierState) => boolean): RefObject<boolean> {
     const ref = useRef(false);
     useEffect(() => {
         const update = (e: KeyboardEvent | PointerEvent) => {
-            ref.current = e[key];
+            ref.current = read(e);
         };
         const reset = () => {
             ref.current = false;
@@ -25,21 +30,24 @@ function useModifierKeyRef(key: ModifierKey): RefObject<boolean> {
             window.removeEventListener("pointermove", update);
             window.removeEventListener("blur", reset);
         };
-    }, [key]);
+    }, [read]);
     return ref;
 }
 
 /** Alt held: the fine 1-cm grid. */
 export function useAltKeyRef(): RefObject<boolean> {
-    return useModifierKeyRef("altKey");
+    return useModifierKeyRef(readAlt);
 }
 
 /** Shift held: no snap points for openings. */
 export function useShiftKeyRef(): RefObject<boolean> {
-    return useModifierKeyRef("shiftKey");
+    return useModifierKeyRef(readShift);
 }
 
-/** Ctrl held: a dragged room does not stick to walls. */
-export function useCtrlKeyRef(): RefObject<boolean> {
-    return useModifierKeyRef("ctrlKey");
+/**
+ * Strg, on Apple devices ⌘ held (`snapOffHeld`): no snapping to snap lines,
+ * a dragged room does not stick to walls, a dragged wall end ignores guides.
+ */
+export function useSnapOffKeyRef(): RefObject<boolean> {
+    return useModifierKeyRef(readSnapOff);
 }

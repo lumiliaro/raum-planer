@@ -5,7 +5,7 @@ import { DIMENSION_GAP_PX, DIMENSION_HEIGHT_PX, dimensionWidthPx } from "@/compo
 import { DimensionText } from "@/components/canvas/DimensionText";
 import { OpeningsLayer, type OpeningDrag, type SnapMark } from "@/components/canvas/OpeningsLayer";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
-import { useAltKeyRef, useCtrlKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
+import { useAltKeyRef, useSnapOffKeyRef, useShiftKeyRef } from "@/hooks/useModifierKeyRef";
 import { placeRoomDimensions, readableRotationDeg, type PlacedDimension } from "@/lib/dimensions";
 import { edgeFrame, openingGap } from "@/lib/opening-geometry";
 import type { FloorId, PointCm, Room } from "@/lib/plan-schema";
@@ -57,7 +57,7 @@ interface RoomsLayerProps {
  * edge of another room of the floor it sticks to that wall (`snapRoomDrag`, within
  * 8 screen px) at the thicker wall's distance, slides along it in the grid, snaps
  * its corners flush and tears off beyond 24 screen px across the wall; the walls
- * it sticks to are highlighted. Ctrl switches sticking off. The plan changes on
+ * it sticks to are highlighted. Strg (Apple: ⌘) switches sticking off. The plan changes on
  * release. Dragging a locked room pans the view like dragging an unselected one.
  * The drag lives in the store (`roomDrag`, only read for this floor), so the
  * shapes layer can preview the shapes moving with the room.
@@ -70,7 +70,7 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
     const highlightedEdge = useAppStore((s) => s.highlightedEdge);
     const altRef = useAltKeyRef();
     const shiftRef = useShiftKeyRef();
-    const ctrlRef = useCtrlKeyRef();
+    const snapOffRef = useSnapOffKeyRef();
     const selectedOpeningId = useAppStore((s) => s.selectedOpeningId);
     const storedDrag = useAppStore((s) => s.roomDrag);
     const setRoomDrag = useAppStore((s) => s.setRoomDrag);
@@ -159,7 +159,7 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
                         dimensions={dimensions?.[i]}
                         draggable={selecting && room.id === selected?.id && !room.locked}
                         altRef={altRef}
-                        ctrlRef={ctrlRef}
+                        snapOffRef={snapOffRef}
                         onDrag={setDrag}
                     />
                 ))}
@@ -221,8 +221,8 @@ interface RoomAreaProps {
     dimensions: readonly PlacedDimension[] | undefined;
     draggable: boolean;
     altRef: RefObject<boolean>;
-    /** Ctrl held: no sticking to walls. */
-    ctrlRef: RefObject<boolean>;
+    /** Strg (Apple: ⌘) held: no sticking to walls. */
+    snapOffRef: RefObject<boolean>;
     /** Reports the snapped offset and stuck walls while dragging, `null` when the drag ends. */
     onDrag: (drag: RoomDragReport | null) => void;
 }
@@ -245,9 +245,9 @@ const stickKey = (sticks: readonly WallStick[]) => sticks.map((s) => `${s.roomId
  * While dragged, the offset follows the grid; across a wall of another room it
  * sticks (`snapRoomDrag`): captured within 8 screen px, torn off beyond 24 px,
  * corners flush along the wall. The sticks live in `dragRef` between pointer
- * moves. With Ctrl held only the grid applies and all sticks are dropped.
+ * moves. With Strg (Apple: ⌘) held only the grid applies and all sticks are dropped.
  */
-function RoomArea({ floorId, room, rooms, scale, dimensions, draggable, altRef, ctrlRef, onDrag }: RoomAreaProps) {
+function RoomArea({ floorId, room, rooms, scale, dimensions, draggable, altRef, snapOffRef, onDrag }: RoomAreaProps) {
     const moveRoom = useAppStore((s) => s.moveRoom);
     const settings = useAppStore(selectSettings);
     const groupRef = useRef<Konva.Group>(null);
@@ -279,7 +279,7 @@ function RoomArea({ floorId, room, rooms, scale, dimensions, draggable, altRef, 
             y: (pos.y - drag.abs.y) * cmPerScreenPx,
         };
         const gridDelta = { x: snapDelta(rawDelta.x, step), y: snapDelta(rawDelta.y, step) };
-        const { delta: snappedCm, sticks } = ctrlRef.current
+        const { delta: snappedCm, sticks } = snapOffRef.current
             ? { delta: gridDelta, sticks: [] }
             : snapRoomDrag({
                   points: room.pointsCm,

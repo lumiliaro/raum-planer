@@ -337,9 +337,9 @@ export interface DraftPointerOptions {
     radiusCm: number;
     /** Shift: free angle instead of 0°/90°/180°/270°. */
     free: boolean;
-    /** Snap to guides („Einrasten“ on and Ctrl not held). */
+    /** Snap to guides („Einrasten“ on and Strg/⌘ not held). */
     guides: boolean;
-    /** Wall lines the first corner snaps onto; `null` = off (Ctrl held or „Einrasten“ off). */
+    /** Wall lines the first corner snaps onto; `null` = off (Strg/⌘ held or „Einrasten“ off). */
     walls: readonly WallLine[] | null;
     /** Step along a wall line in cm (fine step while Alt is held). */
     stepCm: number;

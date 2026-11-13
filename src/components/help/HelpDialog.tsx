@@ -4,6 +4,7 @@ import { SHORTCUT_GROUPS, type ShortcutEntry } from "@/components/help/shortcuts
 import { useLastValue } from "@/components/plan-file/useLastValue";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { formatKeys } from "@/lib/key-labels";
 import { useAppStore, type HelpTab } from "@/store/app-store";
 
 const TAB_CLASS =
@@ -79,7 +80,7 @@ function ShortcutsPanel() {
     );
 }
 
-/** The key alternatives of an entry as `<kbd>`, with „oder“ between them. */
+/** The key alternatives of an entry as `<kbd>` in this device's notation (`formatKeys`), with „oder“ between them. */
 function Keys({ entry }: { entry: ShortcutEntry }) {
     return (
         <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
@@ -87,7 +88,7 @@ function Keys({ entry }: { entry: ShortcutEntry }) {
                 <Fragment key={key}>
                     {i > 0 && <span className="text-xs text-muted-foreground">oder</span>}
                     <kbd className="rounded border border-b-2 bg-muted px-1.5 py-0.5 font-sans text-xs font-medium whitespace-nowrap">
-                        {key}
+                        {formatKeys(key)}
                     </kbd>
                 </Fragment>
             ))}
