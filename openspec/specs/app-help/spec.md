@@ -26,7 +26,7 @@ Das System SHALL einen Dialog „Hilfe“ mit den beiden Reitern „Tastenkürze
 - **THEN** ist die Breitenänderung rückgängig gemacht
 
 ### Requirement: Liste der Tastenkürzel
-Der Reiter „Tastenkürzel“ SHALL alle Tastenkürzel der App mit Taste und deutscher Beschreibung zeigen, gruppiert in „Allgemein“, „Werkzeuge“, „Auswahl“, „Ansicht“, „Beim Ziehen“ und „Raum und Wand zeichnen“. Tasten MUST mit deutschen Namen erscheinen (Strg, Umschalt, Entf, Rücktaste, Bild↑, Bild↓, Esc). Jedes Werkzeug der Werkzeugleiste MUST mit seiner Taste in „Werkzeuge“ stehen.
+Der Reiter „Tastenkürzel“ SHALL alle Tastenkürzel der App mit Taste und deutscher Beschreibung zeigen, gruppiert in „Allgemein“, „Werkzeuge“, „Auswahl“, „Ansicht“, „Beim Ziehen“ und „Raum und Wand zeichnen“. Tasten MUST mit deutschen Namen erscheinen (Strg, Umschalt, Entf, Rücktaste, Bild↑, Bild↓, Esc); auf Apple-Geräten MUST Strg, Umschalt und Alt als ⌘, ⇧ und ⌥ erscheinen. Jedes Werkzeug der Werkzeugleiste MUST mit seiner Taste in „Werkzeuge“ stehen.
 
 #### Scenario: Gruppen und Einträge
 - **WHEN** der Nutzer den Reiter „Tastenkürzel“ öffnet
@@ -41,6 +41,13 @@ Der Reiter „Tastenkürzel“ SHALL alle Tastenkürzel der App mit Taste und de
 - **GIVEN** die Werkzeugleiste bekommt ein weiteres Werkzeug mit eigener Taste
 - **WHEN** der Nutzer den Reiter „Tastenkürzel“ öffnet
 - **THEN** steht das Werkzeug mit seiner Taste unter „Werkzeuge“
+
+#### Scenario: Tastenkürzel auf dem Mac
+- **GIVEN** die App läuft auf einem Mac oder iPad
+- **WHEN** der Nutzer den Reiter „Tastenkürzel“ öffnet
+- **THEN** stehen unter „Allgemein“: ⌘Z Rückgängig, ⇧⌘Z oder ⌘Y Wiederholen
+- **AND** unter „Auswahl“: ⌘C Kopieren, ⌘X Ausschneiden, ⌘V Einfügen, ⌘D Duplizieren, ⇧Bild↑/⇧Bild↓ ganz nach vorne/hinten
+- **AND** unter „Beim Ziehen“: ⌥ Schritte von 1 cm statt 5 cm, ⌘ ohne Einrasten an Formen und ohne Haften an Wänden, ⇧ Tür, Fenster oder Durchgang ohne Einrasten an Rastpunkten
 
 ### Requirement: Datenschutzhinweis
 Der Reiter „Datenschutz“ SHALL in deutscher Sprache erklären, dass die App vollständig im Browser läuft, dass es kein Konto und keinen Server gibt und dass Plan und Vorlagenbilder nur im Speicher dieses Browsers liegen und nicht übertragen werden. Er MUST außerdem sagen, dass jeder Browser und jedes Gerät einen eigenen Stand hat, dass der Browser seinen Speicher leeren kann und dass „Exportieren“ eine Sicherung als Datei erstellt.
