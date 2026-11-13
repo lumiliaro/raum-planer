@@ -7,7 +7,7 @@
 import { getOutlineCm } from "@/lib/outline";
 import { floorContentBounds } from "@/lib/content-bounds";
 import { exportFileBase, localDateKey } from "@/lib/plan-export";
-import type { FloorId, ImageId, Plan, Room, Shape, Underlay } from "@/lib/plan-schema";
+import type { FloorId, ImageId, Plan, Room, Shape, Underlay, Wall } from "@/lib/plan-schema";
 import { underlayBoundsCm } from "@/lib/underlay";
 import type { RectCm } from "@/lib/viewport";
 
@@ -98,6 +98,8 @@ export function fitAreaMm(area: SizeMm, options: Pick<PdfOptions, "dimensions">)
 /** What of a floor may end up on its page. */
 export interface PrintFloorContent {
     rooms: readonly Room[];
+    /** Free walls; always printed, like the rooms. */
+    walls: readonly Wall[];
     shapes: readonly Shape[];
     underlay: Underlay | undefined;
     /** The underlay's image is in this browser. */
@@ -109,6 +111,7 @@ export function floorPrintContent(plan: Plan, floorId: FloorId, availableImages:
     const underlay = plan.underlayByFloor[floorId];
     return {
         rooms: plan.roomsByFloor[floorId] ?? [],
+        walls: plan.wallsByFloor[floorId] ?? [],
         shapes: plan.shapesByFloor[floorId] ?? [],
         underlay,
         imageAvailable: !!underlay?.imageId && availableImages.has(underlay.imageId),
@@ -125,15 +128,15 @@ export function printedUnderlayRect(
 }
 
 /**
- * What the page has to show: the rooms with their walls, with „Möbel“ the
+ * What the page has to show: the rooms with their walls, the free walls, with „Möbel“ the
  * shapes, with „Vorlage“ the underlay if its image is there. `null` if
  * nothing is left (the page then says „Keine Räume auf dieser Etage“).
  */
 export function printContentBounds(content: PrintFloorContent, options: Pick<PdfOptions, "furniture" | "underlay">): RectCm | null {
     const shapes = options.furniture ? content.shapes.filter((s) => getOutlineCm(s) !== null) : [];
     const underlayRect = printedUnderlayRect(content, options);
-    if (content.rooms.length === 0 && shapes.length === 0 && !underlayRect) return null;
-    return floorContentBounds({ rooms: content.rooms, shapes, underlayRect });
+    if (content.rooms.length === 0 && content.walls.length === 0 && shapes.length === 0 && !underlayRect) return null;
+    return floorContentBounds({ rooms: content.rooms, walls: content.walls, shapes, underlayRect });
 }
 
 /** Tolerance of the fit checks in mm, against rounding errors (13850 / 277 must give 50). */

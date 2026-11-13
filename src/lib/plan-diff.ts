@@ -14,6 +14,7 @@ function floorContentChanged(a: Plan, b: Plan, id: FloorId): boolean {
     return (
         a.shapesByFloor[id] !== b.shapesByFloor[id] ||
         a.roomsByFloor[id] !== b.roomsByFloor[id] ||
+        a.wallsByFloor[id] !== b.wallsByFloor[id] ||
         a.underlayByFloor[id] !== b.underlayByFloor[id]
     );
 }
@@ -43,7 +44,7 @@ function changedFloorEntries(before: Plan, after: Plan): Set<FloorId> {
 }
 
 /**
- * Same content for the history: the floor list, the settings, shapes, rooms and underlays per
+ * Same content for the history: the floor list, the settings, shapes, rooms, walls and underlays per
  * floor (by reference) and `createdAt`. Ignores the active floor, `updatedAt`
  * and the name, so switching floors or renaming on export is no undo step.
  */
@@ -108,7 +109,7 @@ export interface KeepFocus {
 
 /**
  * Where to look after undo/redo turned `before` into `after`: the only floor
- * whose shapes, rooms, underlay, name or position differ, if it exists in
+ * whose shapes, rooms, walls, underlay, name or position differ, if it exists in
  * `after` (else `after.activeFloorId`, else the first floor of `after`), and
  * the only room there that was added or changed – even if shapes changed with
  * it, as moving a room takes its shapes along – or, if nothing but that room's

@@ -12,6 +12,7 @@ import planV7Text from "@/lib/__fixtures__/plan-v7.json?raw";
 import planV8Text from "@/lib/__fixtures__/plan-v8.json?raw";
 import planV9Text from "@/lib/__fixtures__/plan-v9.json?raw";
 import planV10Text from "@/lib/__fixtures__/plan-v10.json?raw";
+import planV11Text from "@/lib/__fixtures__/plan-v11.json?raw";
 import { analyzePlanFile } from "@/lib/plan-import";
 
 const TEST_MIGRATIONS: Record<number, PlanMigration> = {
@@ -922,10 +923,10 @@ describe("migration 10 → 11", () => {
         }
     });
 
-    it("turns plan-v10.json via analyzePlanFile into version 11 without any warning but the version (Dateien der Version 10)", () => {
+    it("turns plan-v10.json via analyzePlanFile into the current version without any warning but the version (Dateien der Version 10)", () => {
         const result = analyzePlanFile(planV10Text, "sicherung.json", { now: new Date(), newId: () => crypto.randomUUID() });
         if (!result.ok) throw new Error(result.error);
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(PLAN_SCHEMA_VERSION);
         expect(result.fileVersion).toBe(10);
         expect(result.relation).toBe("older");
         expect(result.invalidRooms).toEqual([]);
@@ -943,15 +944,15 @@ describe("migration 10 → 11", () => {
         const wohnen = all.find((r) => r.name === "Wohnen");
         expect(wohnen?.openings.some((o) => o.kind === "door")).toBe(true);
         expect(all.find((r) => r.name === "Bad")?.color).toBe("#FECACA");
-        const { schemaVersion: _a, underlayByFloor: _u, ...rest } = result.plan;
+        const { schemaVersion: _a, underlayByFloor: _u, wallsByFloor: _x, ...rest } = result.plan;
         const { schemaVersion: _b, underlayByFloor: _w, ...v10Rest } = migrated;
         expect(rest).toEqual(v10Rest);
     });
 
-    it("brings plan-v9.json via 9 → 10 → 11 without any warning but the version", () => {
+    it("brings plan-v9.json via 9 → 10 → 11 → 12 without any warning but the version", () => {
         const result = analyzePlanFile(planV9Text, "plan-v9.json", { now: new Date(), newId: () => crypto.randomUUID() });
         if (!result.ok) throw new Error(result.error);
-        expect(result.plan.schemaVersion).toBe(11);
+        expect(result.plan.schemaVersion).toBe(PLAN_SCHEMA_VERSION);
         expect(result.fileVersion).toBe(9);
         expect(result.invalidRooms).toEqual([]);
         expect(result.invalidOpenings).toEqual([]);
@@ -962,5 +963,105 @@ describe("migration 10 → 11", () => {
         const all = Object.values(result.plan.roomsByFloor).flat();
         expect(all.every((r) => r.locked === false)).toBe(true);
         expect(all.flatMap((r) => r.openings).every((o) => o.beforeFullEdge === null)).toBe(true);
+    });
+});
+
+describe("fixture plan-v11.json", () => {
+    type RawRoom = Record<string, unknown> & { name: string; locked: boolean };
+    const planV11 = JSON.parse(planV11Text) as Record<string, unknown> & {
+        floors: { id: string }[];
+        settings: Record<string, unknown>;
+        roomsByFloor: Record<string, RawRoom[]>;
+    };
+
+    it("is version 11 with changed settings, a locked „Wohnen“ and passes the schema after migration", () => {
+        expect(planV11.schemaVersion).toBe(11);
+        expect(planV11.settings).not.toEqual(FACTORY_SETTINGS);
+        expect(planV11.roomsByFloor.eg.find((r) => r.name === "Wohnen")?.locked).toBe(true);
+        expect(planV11.floors.length).toBeGreaterThan(1);
+        expect(PlanSchema.safeParse(migratePlanData(structuredClone(planV11), 11, PLAN_SCHEMA_VERSION)).success).toBe(true);
+    });
+
+    it("has no walls, as version 11 did not know them", () => {
+        expect(Object.hasOwn(planV11, "wallsByFloor")).toBe(false);
+    });
+});
+
+describe("migration 11 → 12", () => {
+    const planV11 = JSON.parse(planV11Text) as Record<string, unknown> & { floors: { id: string }[] };
+    const migrated = migratePlanData(structuredClone(planV11), 11, 12);
+
+    it("gives every floor an empty wall list and passes the schema", () => {
+        expect(migrated.schemaVersion).toBe(12);
+        expect(migrated.wallsByFloor).toEqual(Object.fromEntries(planV11.floors.map((f) => [f.id, []])));
+        expect(PlanSchema.safeParse(migrated).success).toBe(true);
+    });
+
+    it("keeps rooms, openings, locks, settings, shapes and underlays unchanged", () => {
+        const { schemaVersion: _a, wallsByFloor: _w, ...rest } = migrated;
+        const { schemaVersion: _b, ...v11Rest } = planV11;
+        expect(rest).toEqual(v11Rest);
+    });
+
+    it("keeps an existing wall list and fills only the missing floors", () => {
+        const data = { floors: [{ id: "eg" }, { id: "og" }], wallsByFloor: { eg: ["Wand"] } };
+        expect(migratePlanData(structuredClone(data), 11, 12)).toEqual({
+            ...data,
+            wallsByFloor: { eg: ["Wand"], og: [] },
+            schemaVersion: 12,
+        });
+    });
+
+    it("adds an empty record when the floors are no list", () => {
+        expect(migratePlanData({ floors: "weg" }, 11, 12)).toEqual({ floors: "weg", wallsByFloor: {}, schemaVersion: 12 });
+    });
+
+    it("does not change its input", () => {
+        const input = structuredClone(planV11);
+        PLAN_MIGRATIONS[11](input);
+        expect(input).toEqual(planV11);
+    });
+
+    it("has a migration for every version 1 … 11", () => {
+        for (let version = 1; version <= 11; version++) {
+            expect(PLAN_MIGRATIONS[version], `migration ${version} → ${version + 1}`).toBeTypeOf("function");
+        }
+    });
+
+    it("turns plan-v11.json via analyzePlanFile into version 12 without any warning but the version (Dateien der Version 11)", () => {
+        const result = analyzePlanFile(planV11Text, "sicherung.json", { now: new Date(), newId: () => crypto.randomUUID() });
+        if (!result.ok) throw new Error(result.error);
+        expect(result.plan.schemaVersion).toBe(12);
+        expect(result.fileVersion).toBe(11);
+        expect(result.relation).toBe("older");
+        expect(result.invalidRooms).toEqual([]);
+        expect(result.invalidOpenings).toEqual([]);
+        expect(result.invalidWalls).toEqual([]);
+        expect(result.wallIssues).toEqual([]);
+        expect(result.invalidShapes).toEqual([]);
+        expect(result.invalidFloors).toEqual([]);
+        expect(result.underlayIssues.filter((i) => i.reason !== "Vorlagenbild fehlt")).toEqual([]);
+        expect(result.unknownFloors).toEqual([]);
+        expect(result.settingsIssues).toEqual([]);
+        expect(result.colorIssues).toEqual([]);
+        expect(result.reassignedIds + result.reassignedRoomIds + result.reassignedOpeningIds + result.reassignedWallIds).toBe(0);
+        expect(result.wallCount).toBe(0);
+        expect(Object.values(result.plan.wallsByFloor).every((walls) => walls.length === 0)).toBe(true);
+        const wohnen = Object.values(result.plan.roomsByFloor).flat().find((r) => r.name === "Wohnen");
+        expect(wohnen?.locked).toBe(true);
+        const { schemaVersion: _a, underlayByFloor: _u, ...rest } = result.plan;
+        const { schemaVersion: _b, underlayByFloor: _w, ...v11Rest } = migrated;
+        expect(rest).toEqual(v11Rest);
+    });
+
+    it("brings plan-v10.json via 10 → 11 → 12 without any warning but the version", () => {
+        const result = analyzePlanFile(planV10Text, "plan-v10.json", { now: new Date(), newId: () => crypto.randomUUID() });
+        if (!result.ok) throw new Error(result.error);
+        expect(result.plan.schemaVersion).toBe(12);
+        expect(result.fileVersion).toBe(10);
+        expect(result.invalidRooms).toEqual([]);
+        expect(result.invalidWalls).toEqual([]);
+        expect(result.settingsIssues).toEqual([]);
+        expect(Object.values(result.plan.wallsByFloor).every((walls) => walls.length === 0)).toBe(true);
     });
 });

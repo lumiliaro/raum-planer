@@ -3,9 +3,10 @@
  */
 
 import { placedOutlineCm } from "@/lib/outline";
-import type { Room, Shape, Underlay } from "@/lib/plan-schema";
+import type { Room, Shape, Underlay, Wall } from "@/lib/plan-schema";
 import { wallBandOutline } from "@/lib/room-geometry";
 import { underlayBoundsCm } from "@/lib/underlay";
+import { wallBandOutline as freeWallBandOutline } from "@/lib/wall-geometry";
 import type { RectCm } from "@/lib/viewport";
 
 /** Shown on a floor without visible content: 0 … 10 m in both directions. */
@@ -17,6 +18,8 @@ export interface FloorContent {
     shapes: readonly Shape[];
     /** Count with their wall band. */
     rooms?: readonly Room[];
+    /** Free walls; count with their thickness. */
+    walls?: readonly Wall[];
 }
 
 /**
@@ -29,9 +32,10 @@ export function visibleUnderlayRect(underlay: Underlay | undefined, imageShown: 
 
 /**
  * Union of the underlay rectangle, the rotated outlines of all shapes and the
- * rooms including their wall band; `EMPTY_FLOOR_BOUNDS` if there is nothing.
+ * rooms including their wall band and the bands of the free walls;
+ * `EMPTY_FLOOR_BOUNDS` if there is nothing.
  */
-export function floorContentBounds({ underlayRect, shapes, rooms = [] }: FloorContent): RectCm {
+export function floorContentBounds({ underlayRect, shapes, rooms = [], walls = [] }: FloorContent): RectCm {
     const xs: number[] = [];
     const ys: number[] = [];
     if (underlayRect) {
@@ -46,6 +50,12 @@ export function floorContentBounds({ underlayRect, shapes, rooms = [] }: FloorCo
     }
     for (const room of rooms) {
         for (const p of wallBandOutline(room.pointsCm, room.wallThicknessCm)) {
+            xs.push(p.x);
+            ys.push(p.y);
+        }
+    }
+    for (const wall of walls) {
+        for (const p of freeWallBandOutline(wall)) {
             xs.push(p.x);
             ys.push(p.y);
         }

@@ -16,13 +16,14 @@ describe("SHORTCUT_GROUPS", () => {
             "Auswahl",
             "Ansicht",
             "Beim Ziehen",
-            "Raum zeichnen",
+            "Raum und Wand zeichnen",
         ]);
     });
 
     it("lists every tool of the tool bar with its key and name under „Werkzeuge“", () => {
         expect(group("Werkzeuge").entries).toEqual(TOOLS.map((t) => ({ keys: [t.key], description: t.name })));
         expect(group("Werkzeuge").entries).toContainEqual({ keys: ["G"], description: "Raum" });
+        expect(group("Werkzeuge").entries).toContainEqual({ keys: ["W"], description: "Wand" });
     });
 
     it("lists „?“ under „Allgemein“", () => {
@@ -38,16 +39,16 @@ describe("SHORTCUT_GROUPS", () => {
         ]);
     });
 
-    it("lists the keys while drawing a room", () => {
-        expect(group("Raum zeichnen").entries).toEqual([
-            { keys: ["Ziffern"], description: "Länge in cm eingeben, vor dem ersten Eckpunkt an einer Wand Abstand auf der Wand" },
-            { keys: ["Enter"], description: "Eckpunkt setzen, bei leerem Feld Umriss schließen" },
+    it("lists the keys while drawing a room or a wall", () => {
+        expect(group("Raum und Wand zeichnen").entries).toEqual([
+            { keys: ["Ziffern"], description: "Länge in cm eingeben, vor dem ersten Punkt an einer Wand Abstand auf der Wand" },
+            { keys: ["Enter"], description: "Punkt setzen, bei leerem Feld Umriss schließen" },
             { keys: ["Tab"], description: "Abstand vom anderen Wandende messen" },
-            { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Eckpunkt löschen" },
+            { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Punkt löschen" },
             { keys: ["Alt"], description: "Startpunkt auf der Wand in Schritten von 1 cm statt 5 cm" },
-            { keys: ["Umschalt"], description: "Kante ohne Einrasten auf 0°/90°/180°/270°" },
+            { keys: ["Umschalt"], description: "Kante bzw. Wand ohne Einrasten auf 0°/90°/180°/270°" },
             { keys: ["Strg"], description: "Ohne Hilfslinien und ohne Einrasten an Wänden" },
-            { keys: ["Esc"], description: "Umriss verwerfen" },
+            { keys: ["Esc"], description: "Umriss bzw. Startpunkt verwerfen" },
         ]);
     });
 

@@ -1,6 +1,6 @@
 import { Circle, MousePointer2, Square, SquareDashed } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import { CornerIcon, DoorIcon, LShapeIcon, PassageIcon, UShapeIcon, WindowIcon } from "@/components/icons/shape-icons";
+import { CornerIcon, DoorIcon, LShapeIcon, PassageIcon, UShapeIcon, WallIcon, WindowIcon } from "@/components/icons/shape-icons";
 import type { ActiveTool } from "@/store/app-store";
 
 export interface ToolEntry {
@@ -30,6 +30,7 @@ export const TOOLS: readonly ToolEntry[] = [
     { id: "u-shape", name: "U-Form", hint: "U-Küche", key: "U", icon: UShapeIcon },
     { id: "corner", name: "Ecke", hint: "Eckdusche, Eckregal", key: "C", icon: CornerIcon },
     { id: "room", name: "Raum", hint: "Innenmaße nachzeichnen", key: "G", icon: SquareDashed, divider: true },
+    { id: "wall", name: "Wand", hint: "einzelne Wand zeichnen", key: "W", icon: WallIcon },
     { id: "door-opening", name: "Tür", hint: "in der Raumwand", key: "T", icon: DoorIcon, requires: "room" },
     { id: "window", name: "Fenster", key: "F", icon: WindowIcon, requires: "room" },
     { id: "passage", name: "Durchgang", hint: "offene Wand", key: "D", icon: PassageIcon, requires: "room" },

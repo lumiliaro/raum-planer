@@ -6,6 +6,7 @@ import { RoomDraftField, RoomDraftLayer } from "@/components/canvas/RoomDraftLay
 import { ROOM_NODE_NAME, RoomsLayer } from "@/components/canvas/RoomsLayer";
 import { SHAPE_NODE_NAME } from "@/components/canvas/ShapeNode";
 import { ShapesLayer } from "@/components/canvas/ShapesLayer";
+import { WALL_NODE_NAME, WallsLayer } from "@/components/canvas/WallsLayer";
 import { ZoomControls } from "@/components/canvas/ZoomControls";
 import { GridLayer } from "@/components/underlay/GridLayer";
 import { MissingImageHint } from "@/components/underlay/MissingImageHint";
@@ -20,14 +21,15 @@ import { SNAP_POINT_TOLERANCE_PX } from "@/lib/opening-snap";
 import type { PointCm } from "@/lib/plan-schema";
 import { CORNER_SNAP_RADIUS_PX, resolveDraftPointer, wallLines } from "@/lib/room-drawing";
 import { snapStepCm } from "@/lib/snap";
+import { resolveWallPointer, wallSnapTargets } from "@/lib/wall-drawing";
 import { cmToImagePoint } from "@/lib/underlay";
 import { fitViewport, screenToWorld, wheelFactor, zoomAt, zoomAtCenter, ZOOM_STEP } from "@/lib/viewport";
 import { isOpeningTool, OPENING_KIND_OF_TOOL, selectSettings, useAppStore } from "@/store/app-store";
 
 /**
  * The drawing area of the active floor, in cm (100 % = 1 screen px per cm):
- * underlay, the 1-m grid when no underlay is visible, rooms, shapes, the room
- * being drawn and – in calibration mode – only the calibration overlay on the
+ * underlay, the 1-m grid when no underlay is visible, rooms, free walls, shapes,
+ * the room or wall being drawn and – in calibration mode – only the calibration overlay on the
  * underlay. A missing underlay image is reported by a card with „Bild laden“.
  */
 export function FloorCanvas() {
@@ -43,6 +45,7 @@ export function FloorCanvas() {
     const underlay = useAppStore((s) => s.plan.underlayByFloor[floorId]);
     const shapes = useAppStore((s) => s.plan.shapesByFloor[floorId]);
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId]);
+    const freeWalls = useAppStore((s) => s.plan.wallsByFloor[floorId]);
     const walls = useMemo(() => wallLines(rooms), [rooms]);
     const activeTool = useAppStore((s) => s.activeTool);
     const insertShape = useAppStore((s) => s.insertShape);
@@ -50,6 +53,7 @@ export function FloorCanvas() {
     const selectShape = useAppStore((s) => s.selectShape);
     const selectRoom = useAppStore((s) => s.selectRoom);
     const selectOpening = useAppStore((s) => s.selectOpening);
+    const selectWall = useAppStore((s) => s.selectWall);
     const addDraftPoint = useAppStore((s) => s.addDraftPoint);
     const closeDraft = useAppStore((s) => s.closeDraft);
     const settings = useAppStore(selectSettings);
@@ -88,8 +92,9 @@ export function FloorCanvas() {
                 underlayRect: visibleUnderlayRect(geometry ?? undefined, underlayVisible),
                 shapes: calibrating ? [] : shapes,
                 rooms: calibrating ? [] : rooms,
+                walls: calibrating ? [] : freeWalls,
             }),
-        [geometry, underlayVisible, calibrating, shapes, rooms],
+        [geometry, underlayVisible, calibrating, shapes, rooms, freeWalls],
     );
 
     // Fit on first display of a floor, once its content and the stage size are known.
@@ -177,6 +182,19 @@ export function FloorCanvas() {
             });
             if (next.closes) closeDraft();
             else if (next.point) addDraftPoint(next.point);
+        } else if (activeTool === "wall") {
+            // Start, then end of a free wall: a room corner or wall end nearby wins, then a wall line
+            // (start: position on it, Alt: fine steps; end: where the wall runs into it), else the
+            // pointer (end: in the snapped direction, Shift: free), then guides. Same as the preview.
+            if (!pt || !vp) return;
+            const start = useAppStore.getState().roomDraft?.points[0] ?? null;
+            const next = resolveWallPointer(start, pt, wallSnapTargets(rooms, freeWalls), {
+                radiusCm: CORNER_SNAP_RADIUS_PX / vp.scale,
+                free: e.evt.shiftKey,
+                snap: shapeSnapping && !e.evt.ctrlKey,
+                stepCm: snapStepCm(e.evt.altKey, settings),
+            });
+            if (next.point) addDraftPoint(next.point);
         } else if (isOpeningTool(activeTool)) {
             // Door or window: set on the room edge at the click (its band or 10 px beside it); elsewhere nothing happens.
             // Snap points unless Shift is held.
@@ -190,12 +208,15 @@ export function FloorCanvas() {
             // Shape tool: insert centered at the click, anywhere, also on top of other shapes.
             if (pt) insertShape(activeTool, pt);
         } else {
-            // Clicks on the selection handles keep the selection; shapes lie above openings, openings above rooms.
+            // Clicks on the selection handles keep the selection; shapes lie above walls, walls above
+            // openings, openings above rooms.
             if (e.target.findAncestor("Transformer")) return;
             const shapeNode = e.target.findAncestor(`.${SHAPE_NODE_NAME}`, true);
-            const openingNode = shapeNode ? null : e.target.findAncestor(`.${OPENING_NODE_NAME}`, true);
-            const roomNode = shapeNode || openingNode ? null : e.target.findAncestor(`.${ROOM_NODE_NAME}`, true);
+            const wallNode = shapeNode ? null : e.target.findAncestor(`.${WALL_NODE_NAME}`, true);
+            const openingNode = shapeNode || wallNode ? null : e.target.findAncestor(`.${OPENING_NODE_NAME}`, true);
+            const roomNode = shapeNode || wallNode || openingNode ? null : e.target.findAncestor(`.${ROOM_NODE_NAME}`, true);
             if (shapeNode) selectShape(shapeNode.id());
+            else if (wallNode) selectWall(wallNode.id());
             else if (openingNode) selectOpening(openingNode.id());
             else if (roomNode) selectRoom(roomNode.id());
             else selectShape(null);
@@ -255,9 +276,10 @@ export function FloorCanvas() {
     });
 
     // Shape tool: arrow with plus (a click inserts); „Tür“/„Fenster“: the same, but only over a room
-    // edge or its band, else the plain arrow; room tool: crosshair; otherwise the hand (a drag pans).
+    // edge or its band, else the plain arrow; room and wall tool: crosshair; otherwise the hand (a drag pans).
+    const drawing = activeTool === "room" || activeTool === "wall" ? activeTool : null;
     const cursorClass =
-        calibrating || activeTool === "room"
+        calibrating || drawing
             ? "cursor-crosshair"
             : openingTool
               ? overEdge
@@ -295,11 +317,14 @@ export function FloorCanvas() {
                     )}
                     {vp && !underlayVisible && <GridLayer />}
                     {vp && !calibrating && <RoomsLayer floorId={floorId} scale={vp.scale} hoverMark={openingTool ? hoverMark : null} />}
+                    {vp && !calibrating && <WallsLayer floorId={floorId} scale={vp.scale} />}
                     {vp && !calibrating && <ShapesLayer floorId={floorId} scale={vp.scale} />}
-                    {vp && !calibrating && activeTool === "room" && <RoomDraftLayer floorId={floorId} scale={vp.scale} />}
+                    {vp && !calibrating && drawing && (
+                        <RoomDraftLayer key={drawing} floorId={floorId} tool={drawing} scale={vp.scale} />
+                    )}
                 </Stage>
             )}
-            {!calibrating && activeTool === "room" && <RoomDraftField />}
+            {!calibrating && drawing && <RoomDraftField tool={drawing} />}
             {underlay && availability === "missing" && !calibrating && <MissingImageHint floorId={floorId} />}
             <ZoomControls
                 scale={vp?.scale ?? null}

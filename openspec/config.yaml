@@ -20,9 +20,10 @@ context: |
       wiederhergestellt. Vorlagenbilder liegen wegen ihrer Größe nicht im
       localStorage, sondern in IndexedDB; der Plan verweist nur auf sie.
     - Oberfläche auf Deutsch. Code, Bezeichner und Commits auf Englisch.
-    - Bewusst einfach: Räume statt Wände (Wanddicke je Raumkante, aber keine
-      eigenen Wandobjekte und keine Wandverbindungen), keine 3D-Ansicht, kein
-      Mehrbenutzer-Betrieb.
+    - Bewusst einfach: Räume sind der Hauptweg (Wanddicke je Raumkante, keine
+      Wandverbindungen). Einzelne freie Wände (gerades Stück mit Mittellinie
+      und Dicke) ergänzen sie, z. B. für Trennwände; sie werden nicht mit
+      Raumwänden verbunden. Keine 3D-Ansicht, kein Mehrbenutzer-Betrieb.
 
     Tech-Stack:
     - Vite + React + TypeScript (strict)
@@ -56,12 +57,14 @@ context: |
 
     Datenmodell der Planung (verbindlich, wächst schrittweise über die
     Changes floors-in-plan, floor-underlay, floor-rooms, room-openings,
-    wall-thickness, room-passage, room-color, app-settings, room-lock;
+    wall-thickness, room-passage, room-color, app-settings, room-lock,
+    free-wall;
     maßgeblich ist src/lib/plan-schema.ts):
     - Plan { schemaVersion, name, createdAt, updatedAt, activeFloorId,
       floors: Floor[],
       underlayByFloor: Partial<Record<floorId, Underlay>>,
       roomsByFloor: Record<floorId, Room[]>,
+      wallsByFloor: Record<floorId, Wall[]>,
       shapesByFloor: Record<floorId, Shape[]>,
       settings: PlanSettings }
     - PlanSettings { defaultWallThicknessCm, wallColor: "#RRGGBB",
@@ -86,6 +89,12 @@ context: |
       locked sperrt den Raum (nicht verschiebbar, Kanten und Wanddicken
       fest, nicht löschbar; Name, Farbe und Öffnungen bleiben änderbar);
       neue Räume sind nicht gesperrt.
+    - Wall { id, startCm: {x,y}, endCm: {x,y}, thicknessCm }: freie Wand,
+      Start- und Endpunkt der Mittellinie absolut in cm (mindestens 0,1 cm
+      lang), Dicke > 0 und ≤ 100 cm, je zur Hälfte beiderseits der
+      Mittellinie. Gezeichnet über den Räumen und unter den Möbeln in der
+      Wandfarbe; treffen sich zwei Wandenden genau, wird die Ecke geschlossen.
+      Neue Wände bekommen die Wanddicke neuer Räume aus den Einstellungen.
     - Shape (gemeinsam) { id, kind, x, y, rotationDeg, mirrored, label?,
       style { fill|null, stroke, strokeWidth, opacity }, locked? }
       plus geometry je nach kind (diskriminierte Union über kind):

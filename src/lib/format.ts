@@ -100,6 +100,14 @@ export function formatRoomCount(count: number, { dative = false }: { dative?: bo
     return `${count} ${dative ? "Räumen" : "Räume"}`;
 }
 
+/**
+ * `1` → `"1 Wand"`, `4` → `"4 Wände"`; with `dative` (after „mit“) `2` → `"2 Wänden"`.
+ */
+export function formatWallCount(count: number, { dative = false }: { dative?: boolean } = {}): string {
+    if (count === 1) return "1 Wand";
+    return `${count} ${dative ? "Wänden" : "Wände"}`;
+}
+
 /** German name of an opening kind, e.g. in the panel header and in hints. */
 export function openingKindName(kind: OpeningKind): string {
     switch (kind) {

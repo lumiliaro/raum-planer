@@ -154,18 +154,41 @@ export function snapToGuides(
     return { point: roundPointCm(result), guides };
 }
 
-/** One side of a room's wall: the edge itself (`inner`) or the edge moved outwards by its wall thickness (`outer`). */
+/**
+ * Where a wall line comes from: one side of a room's wall – the edge itself
+ * (`inner`) or the edge moved outwards by its wall thickness (`outer`) – or
+ * one side of a free wall (see `wallSideLines` in `wall-geometry.ts`).
+ */
+export type WallLineSource =
+    | { kind: "room"; roomId: string; edgeIndex: number; face: "inner" | "outer" }
+    | { kind: "wall"; wallId: string; side: "left" | "right" };
+
+/** One side of a wall, with its source. */
 export interface WallLine {
-    roomId: string;
-    edgeIndex: number;
-    face: "inner" | "outer";
+    source: WallLineSource;
     /** At the edge's start corner (`outer`: moved outwards, not the mitred corner of the wall band). */
     start: PointCm;
     end: PointCm;
     /** Length of the edge in cm, the same on both sides. */
     lengthCm: number;
-    /** Unit normal pointing out of the room. */
+    /** Unit normal: out of the room for a room's wall, away from the center line for a free wall. */
     outwardNormal: PointCm;
+}
+
+/** `true` if both sources name the same side of the same wall. */
+export function sameWallLineSource(a: WallLineSource, b: WallLineSource): boolean {
+    if (a.kind === "room" && b.kind === "room") return a.roomId === b.roomId && a.edgeIndex === b.edgeIndex && a.face === b.face;
+    if (a.kind === "wall" && b.kind === "wall") return a.wallId === b.wallId && a.side === b.side;
+    return false;
+}
+
+/**
+ * The side of a wall line on which its distances are labelled, along
+ * `outwardNormal`: away from the wall material, so into the room (`-1`) for
+ * the inner side of a room's wall, else outwards (`1`).
+ */
+export function wallLineLabelSide(line: WallLine): 1 | -1 {
+    return line.source.kind === "room" && line.source.face === "inner" ? -1 : 1;
 }
 
 /** The end of a wall line a position is measured from. */
@@ -200,11 +223,15 @@ export function wallLines(rooms: readonly Room[]): WallLine[] {
             const thickness = room.wallThicknessCm[edgeIndex] ?? DEFAULT_WALL_THICKNESS_CM;
             const shift = (p: PointCm): PointCm => ({ x: p.x + normal.x * thickness, y: p.y + normal.y * thickness });
             const outwardNormal = { ...normal };
-            lines.push({ roomId: room.id, edgeIndex, face: "inner", start: { ...start }, end: { ...end }, lengthCm, outwardNormal });
             lines.push({
-                roomId: room.id,
-                edgeIndex,
-                face: "outer",
+                source: { kind: "room", roomId: room.id, edgeIndex, face: "inner" },
+                start: { ...start },
+                end: { ...end },
+                lengthCm,
+                outwardNormal,
+            });
+            lines.push({
+                source: { kind: "room", roomId: room.id, edgeIndex, face: "outer" },
                 start: shift(start),
                 end: shift(end),
                 lengthCm,
@@ -267,24 +294,18 @@ export function snapToWall(
 
 /** The wall line a typed distance is measured on, and the end it is measured from. */
 export interface WallAnchor {
-    roomId: string;
-    edgeIndex: number;
-    face: WallLine["face"];
+    source: WallLineSource;
     fromEnd: WallEnd;
 }
 
 /** The anchor of a wall position (its line and reference end). */
 export function wallAnchorOf({ line, fromEnd }: WallPosition): WallAnchor {
-    return { roomId: line.roomId, edgeIndex: line.edgeIndex, face: line.face, fromEnd };
+    return { source: line.source, fromEnd };
 }
 
-/** The anchor's wall line, computed from the current rooms; `null` if the room or edge is gone. */
-export function wallLineFor(rooms: readonly Room[], anchor: WallAnchor): WallLine | null {
-    const room = rooms.find((r) => r.id === anchor.roomId);
-    if (!room) return null;
-    return (
-        wallLines([room]).find((l) => l.edgeIndex === anchor.edgeIndex && l.face === anchor.face) ?? null
-    );
+/** The anchor's wall line among the current `lines`; `null` if its room, edge or wall is gone. */
+export function wallLineFor(lines: readonly WallLine[], anchor: WallAnchor): WallLine | null {
+    return lines.find((l) => sameWallLineSource(l.source, anchor.source)) ?? null;
 }
 
 const OFFSET_PATTERN = /^\d+([.,]\d+)?$/;

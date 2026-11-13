@@ -3,8 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { TextField } from "@/components/properties/TextField";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
-import { formatRoomCount, formatShapeCount } from "@/lib/format";
-import { canMoveFloor, canRemoveFloor, type FloorMoveDirection } from "@/lib/plan";
+import { canMoveFloor, canRemoveFloor, floorHasContent, floorRemovalContent, type FloorMoveDirection } from "@/lib/plan";
 import { MAX_FLOOR_NAME_LENGTH, MAX_FLOORS, type Floor, type FloorId, type Plan } from "@/lib/plan-schema";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -53,7 +52,7 @@ function FloorsForm() {
     const canAdd = plan.floors.length < MAX_FLOORS;
 
     const requestRemove = (floor: Floor) => {
-        if (hasContent(plan, floor.id)) {
+        if (floorHasContent(plan, floor.id)) {
             setConfirmingId(floor.id);
         } else if (removeFloor(floor.id)) {
             pendingFocus.current = addButtonId;
@@ -114,14 +113,6 @@ function FloorsForm() {
                 <DialogClose render={<Button className="text-[13px]" />}>Fertig</DialogClose>
             </DialogFooter>
         </>
-    );
-}
-
-function hasContent(plan: Plan, floorId: FloorId): boolean {
-    return (
-        (plan.shapesByFloor[floorId]?.length ?? 0) > 0 ||
-        (plan.roomsByFloor[floorId]?.length ?? 0) > 0 ||
-        plan.underlayByFloor[floorId] !== undefined
     );
 }
 
@@ -244,14 +235,8 @@ interface ConfirmRemoveRowProps {
 
 /** Inline confirmation instead of a second dialog. */
 function ConfirmRemoveRow({ plan, floor, onConfirm, onCancel }: ConfirmRemoveRowProps) {
-    const shapes = plan.shapesByFloor[floor.id]?.length ?? 0;
-    const rooms = plan.roomsByFloor[floor.id]?.length ?? 0;
-    const counts = [
-        ...(shapes > 0 ? [formatShapeCount(shapes)] : []),
-        ...(rooms > 0 ? [formatRoomCount(rooms, { dative: true })] : []),
-    ];
     // „mit 2 Formen und 3 Räumen“; only an underlay: „mit Vorlage“.
-    const what = counts.length > 0 ? counts.join(" und ") : "Vorlage";
+    const what = floorRemovalContent(plan, floor.id);
 
     return (
         <li

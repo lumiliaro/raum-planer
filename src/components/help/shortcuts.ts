@@ -66,16 +66,16 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
         ],
     },
     {
-        title: "Raum zeichnen",
+        title: "Raum und Wand zeichnen",
         entries: [
-            { keys: ["Ziffern"], description: "Länge in cm eingeben, vor dem ersten Eckpunkt an einer Wand Abstand auf der Wand" },
-            { keys: ["Enter"], description: "Eckpunkt setzen, bei leerem Feld Umriss schließen" },
+            { keys: ["Ziffern"], description: "Länge in cm eingeben, vor dem ersten Punkt an einer Wand Abstand auf der Wand" },
+            { keys: ["Enter"], description: "Punkt setzen, bei leerem Feld Umriss schließen" },
             { keys: ["Tab"], description: "Abstand vom anderen Wandende messen" },
-            { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Eckpunkt löschen" },
+            { keys: ["Rücktaste"], description: "Zeichen bzw. letzten Punkt löschen" },
             { keys: ["Alt"], description: "Startpunkt auf der Wand in Schritten von 1 cm statt 5 cm" },
-            { keys: ["Umschalt"], description: "Kante ohne Einrasten auf 0°/90°/180°/270°" },
+            { keys: ["Umschalt"], description: "Kante bzw. Wand ohne Einrasten auf 0°/90°/180°/270°" },
             { keys: ["Strg"], description: "Ohne Hilfslinien und ohne Einrasten an Wänden" },
-            { keys: ["Esc"], description: "Umriss verwerfen" },
+            { keys: ["Esc"], description: "Umriss bzw. Startpunkt verwerfen" },
         ],
     },
 ];

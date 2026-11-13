@@ -8,7 +8,7 @@ const tool = (id: string) => {
 };
 
 describe("TOOLS", () => {
-    it("lists only L-Form, U-Form and Ecke below Ellipse, then „Raum“, „Tür“, „Fenster“ and „Durchgang“", () => {
+    it("lists only L-Form, U-Form and Ecke below Ellipse, then „Raum“, „Wand“, „Tür“, „Fenster“ and „Durchgang“", () => {
         expect(TOOLS.map((t) => t.name)).toEqual([
             "Auswählen",
             "Rechteck",
@@ -17,6 +17,7 @@ describe("TOOLS", () => {
             "U-Form",
             "Ecke",
             "Raum",
+            "Wand",
             "Tür",
             "Fenster",
             "Durchgang",
@@ -36,6 +37,7 @@ describe("TOOLS", () => {
         expect(toolTooltip(tool("rect"))).toBe("Rechteck – Schrank, Bett, Tisch (R)");
         expect(toolTooltip(tool("select"))).toBe("Auswählen (V)");
         expect(toolTooltip(tool("room"))).toBe("Raum – Innenmaße nachzeichnen (G)");
+        expect(toolTooltip(tool("wall"))).toBe("Wand – einzelne Wand zeichnen (W)");
     });
 
     it("finds tools by key, ignoring case", () => {
@@ -48,6 +50,8 @@ describe("TOOLS", () => {
         expect(toolForKey("D")?.id).toBe("passage");
         expect(toolForKey("g")?.id).toBe("room");
         expect(toolForKey("G")?.id).toBe("room");
+        expect(toolForKey("w")?.id).toBe("wall");
+        expect(toolForKey("W")?.id).toBe("wall");
         expect(toolForKey("x")).toBeUndefined();
     });
 

@@ -9,7 +9,7 @@ import { isEditableTarget, isInDialog } from "@/hooks/isEditableTarget";
 import { parseLengthCm } from "@/lib/calibration";
 import { readableRotationDeg } from "@/lib/dimensions";
 import { formatCm } from "@/lib/format";
-import type { FloorId, PointCm, Room } from "@/lib/plan-schema";
+import type { FloorId, PointCm } from "@/lib/plan-schema";
 import {
     canAppendPoint,
     canClose,
@@ -22,13 +22,15 @@ import {
     wallAnchorOf,
     wallDistances,
     wallLineFor,
-    wallLines,
+    wallLineLabelSide,
     type DraftGuide,
     type Direction,
     type WallLine,
     type WallPosition,
 } from "@/lib/room-drawing";
-import { distanceCm } from "@/lib/room-geometry";
+import { distanceCm, GEOMETRY_EPS_CM, MIN_EDGE_CM } from "@/lib/room-geometry";
+import { draftTargets, resolveWallPointer, type DraftTool } from "@/lib/wall-drawing";
+import { wallBandOutline } from "@/lib/wall-geometry";
 import { snapStepCm } from "@/lib/snap";
 import type { Point } from "@/lib/viewport";
 import { selectSettings, useAppStore, type RoomDraft } from "@/store/app-store";
@@ -75,6 +77,9 @@ const WALL_END_DOT_PX = 3.5;
 /** Distance of the wall distances' center from the wall line, in screen px (clear of the ring). */
 const WALL_LABEL_OFFSET_PX = RING_RADIUS_PX + DIMENSION_GAP_PX + DIMENSION_HEIGHT_PX / 2;
 
+/** Opacity of the wall band shown towards the pointer with „Wand“. */
+const WALL_PREVIEW_OPACITY = 0.6;
+
 /** Digits with at most one comma or point, as typed so far. */
 const PARTIAL_LENGTH = /^\d*([.,]\d*)?$/;
 
@@ -96,9 +101,9 @@ interface DraftPreview {
  * partial or too large text shows its longest valid beginning ("520" on a
  * 500-cm wall: 52 cm), nothing valid the reference end; `null` if the line is gone.
  */
-function typedWallPosition(draft: RoomDraft, rooms: readonly Room[]): WallPosition | null {
+function typedWallPosition(draft: RoomDraft, lines: readonly WallLine[]): WallPosition | null {
     if (!draft.wallAnchor) return null;
-    const line = wallLineFor(rooms, draft.wallAnchor);
+    const line = wallLineFor(lines, draft.wallAnchor);
     if (!line) return null;
     const { fromEnd } = draft.wallAnchor;
     let offsetCm = 0;
@@ -113,7 +118,8 @@ function typedWallPosition(draft: RoomDraft, rooms: readonly Room[]): WallPositi
 }
 
 interface PreviewInput {
-    rooms: readonly Room[];
+    tool: DraftTool;
+    /** Room corners (with „Wand“ also the ends of the free walls). */
     roomCorners: readonly PointCm[];
     walls: readonly WallLine[];
     /** Current stage scale (screen px per cm). */
@@ -133,11 +139,11 @@ function currentDirection(draft: RoomDraft, pointer: DraftPointerState): Directi
 function previewFor(
     draft: RoomDraft | null,
     pointer: DraftPointerState,
-    { rooms, roomCorners, walls, scale, snapping, settings }: PreviewInput,
+    { tool, roomCorners, walls, scale, snapping, settings }: PreviewInput,
 ): DraftPreview | null {
     if (draft?.wallAnchor) {
         // The distance is being typed: the line stays fixed wherever the pointer is.
-        const wall = typedWallPosition(draft, rooms);
+        const wall = typedWallPosition(draft, walls);
         return wall ? { end: wall.point, valid: true, snapped: false, closes: false, guides: [], wall } : null;
     }
     if (!pointer.cm) return null;
@@ -147,7 +153,21 @@ function previewFor(
         const direction = currentDirection(draft, pointer);
         if (!direction) return null;
         const end = pointAtDistance(points[points.length - 1], direction, typed);
-        return { end, valid: canAppendPoint(points, end), snapped: false, closes: false, guides: [] };
+        const valid = tool === "wall" ? isWallLongEnough(points[0], end) : canAppendPoint(points, end);
+        return { end, valid, snapped: false, closes: false, guides: [] };
+    }
+    if (tool === "wall") {
+        const start = points[0] ?? null;
+        const snapOn = snapping && !pointer.ctrl;
+        const resolved = resolveWallPointer(
+            start,
+            pointer.cm,
+            { corners: roomCorners, lines: walls },
+            { radiusCm: CORNER_SNAP_RADIUS_PX / scale, free: pointer.shift, snap: snapOn, stepCm: snapStepCm(pointer.alt, settings) },
+        );
+        if (!resolved.point) return null;
+        const valid = !start || isWallLongEnough(start, resolved.point);
+        return { end: resolved.point, valid, snapped: resolved.snapped, closes: false, guides: resolved.guides, wall: resolved.wall };
     }
     const resolved = resolveDraftPointer(points, pointer.cm, roomCorners, {
         radiusCm: CORNER_SNAP_RADIUS_PX / scale,
@@ -168,8 +188,15 @@ function previewFor(
     };
 }
 
+/** A wall from `start` to `end` is at least 0.1 cm long. */
+function isWallLongEnough(start: PointCm, end: PointCm): boolean {
+    return distanceCm(start, end) >= MIN_EDGE_CM - GEOMETRY_EPS_CM;
+}
+
 interface RoomDraftLayerProps {
     floorId: FloorId;
+    /** „Raum“ draws an outline, „Wand“ one free wall from its start point. */
+    tool: DraftTool;
     /** Current stage scale (screen px per cm). */
     scale: number;
 }
@@ -186,18 +213,24 @@ interface RoomDraftLayerProps {
  * it (or closes the outline with an empty field), Tab measures the distance
  * from the other wall end, Backspace deletes a character or the last corner,
  * Esc discards the outline.
+ * With „Wand“ the same, but for one free wall: after the start point the wall
+ * towards the pointer is shown as a band in the new thickness with its length,
+ * the start point also snaps to the sides of other walls and the end to wall
+ * lines it runs into (`resolveWallPointer`); Enter with an empty field does nothing.
  * Clicks are handled by the canvas (`FloorCanvas`).
  */
-export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
+export function RoomDraftLayer({ floorId, tool, scale }: RoomDraftLayerProps) {
     const draft = useAppStore((s) => s.roomDraft);
     const rooms = useAppStore((s) => s.plan.roomsByFloor[floorId]);
+    const freeWalls = useAppStore((s) => s.plan.wallsByFloor[floorId]);
     const snapping = useAppStore((s) => s.shapeSnapping);
     const settings = useAppStore(selectSettings);
     const pointer = useDraftPointer();
     const layerRef = useRef<Konva.Layer>(null);
 
-    const roomCorners = useMemo(() => rooms.flatMap((room) => room.pointsCm), [rooms]);
-    const walls = useMemo(() => wallLines(rooms), [rooms]);
+    const targets = useMemo(() => draftTargets(tool, rooms, freeWalls ?? []), [tool, rooms, freeWalls]);
+    const roomCorners = targets.corners;
+    const walls = targets.lines;
 
     // Track the pointer on the stage; Shift, Ctrl and Alt also change the preview without moving the mouse.
     useEffect(() => {
@@ -230,7 +263,7 @@ export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
         };
     }, []);
 
-    const preview = previewFor(draft, pointer, { rooms, roomCorners, walls, scale, snapping, settings });
+    const preview = previewFor(draft, pointer, { tool, roomCorners, walls, scale, snapping, settings });
     // The keys open the field „Abstand“ for the wall position currently shown.
     const shownWall = useRef<WallPosition | null>(null);
     shownWall.current = preview?.wall ?? null;
@@ -245,9 +278,25 @@ export function RoomDraftLayer({ floorId, scale }: RoomDraftLayerProps) {
     const labelCm =
         last && preview ? { x: (last.x + preview.end.x) / 2, y: (last.y + preview.end.y) / 2 - LENGTH_LABEL_OFFSET_PX * px } : null;
     const rubberColor = preview?.valid ? EDGE_COLOR : INVALID_COLOR;
+    // „Wand“: the wall towards the pointer as a band in the thickness it will get.
+    const band =
+        tool === "wall" && last && preview
+            ? wallBandOutline({ id: "", startCm: last, endCm: preview.end, thicknessCm: settings.defaultWallThicknessCm })
+            : [];
 
     return (
         <Layer ref={layerRef} listening={false}>
+            {band.length > 0 && (
+                <Line
+                    points={band.flatMap((p) => [p.x, p.y])}
+                    closed
+                    fill={settings.wallColor}
+                    opacity={WALL_PREVIEW_OPACITY}
+                    stroke={preview?.valid ? undefined : INVALID_COLOR}
+                    strokeWidth={1}
+                    strokeScaleEnabled={false}
+                />
+            )}
             {points.length >= 2 && (
                 <Line
                     points={points.flatMap((p) => [p.x, p.y])}
@@ -309,8 +358,8 @@ function WallPositionMark({ position, scale }: { position: WallPosition; scale: 
     const { line, fromEnd, point } = position;
     const { fromStartCm, fromEndCm } = wallDistances(position);
     const refEnd = fromEnd === "start" ? line.start : line.end;
-    // Outer side: away from the room; inner side: into the room.
-    const side = (line.face === "outer" ? 1 : -1) * WALL_LABEL_OFFSET_PX * px;
+    // Away from the wall band: outside a room's outer side, into the room at its inner side.
+    const side = wallLineLabelSide(line) * WALL_LABEL_OFFSET_PX * px;
     const angleDeg = (Math.atan2(line.end.y - line.start.y, line.end.x - line.start.x) * 180) / Math.PI;
     const rotationDeg = readableRotationDeg(angleDeg, 0);
     const distances = [
@@ -411,14 +460,16 @@ const HINTS = {
 } as const;
 
 /** The typed length (or distance on a wall) next to the pointer, with a hint after a rejected Enter. HTML above the canvas. */
-export function RoomDraftField() {
+export function RoomDraftField({ tool }: { tool: DraftTool }) {
     const draft = useAppStore((s) => s.roomDraft);
     const rooms = useAppStore((s) => s.plan.roomsByFloor[s.plan.activeFloorId]);
+    const walls = useAppStore((s) => s.plan.wallsByFloor[s.plan.activeFloorId]);
     const screen = useDraftPointer((s) => s.screen);
     if (!draft || !screen || (!draft.lengthText && !draft.hint)) return null;
     const hint = (h: NonNullable<RoomDraft["hint"]>): string => {
         if (h !== "wallTooLong") return HINTS[h];
-        const line = draft.wallAnchor ? wallLineFor(rooms ?? [], draft.wallAnchor) : null;
+        const lines = draftTargets(tool, rooms ?? [], walls ?? []).lines;
+        const line = draft.wallAnchor ? wallLineFor(lines, draft.wallAnchor) : null;
         return line ? `Darf höchstens ${formatCm(line.lengthCm)} sein` : "";
     };
     return (

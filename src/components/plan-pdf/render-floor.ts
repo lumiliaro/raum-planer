@@ -33,10 +33,11 @@ import {
     type PdfOptions,
     type SizeMm,
 } from "@/lib/pdf-layout";
-import type { PointCm, Room, Shape, Underlay } from "@/lib/plan-schema";
+import type { PointCm, Room, Shape, Underlay, Wall } from "@/lib/plan-schema";
 import { roomAreaFill } from "@/lib/room-colors";
 import { labelPointCm, roomAreaM2, wallBandOutline } from "@/lib/room-geometry";
 import { underlayGroupAttrs } from "@/lib/underlay";
+import { joinedEnds, wallBandOutline as freeWallBandOutline } from "@/lib/wall-geometry";
 
 /** Resolution of the drawing on paper. */
 export const PRINT_DPI = 300;
@@ -59,6 +60,8 @@ const DIMENSION_MARGIN_MM = 1;
 
 export interface FloorDrawing {
     rooms: readonly Room[];
+    /** Free walls; always drawn, like the rooms. */
+    walls: readonly Wall[];
     /** Already filtered by „Möbel“ (empty without). */
     shapes: readonly Shape[];
     /** Underlay to draw, with its decoded image; `null` without „Vorlage“ or image. */
@@ -73,13 +76,14 @@ export interface FloorDrawing {
 
 /** Builds the `FloorDrawing` of a floor from the dialog's options. */
 export function floorDrawing(
-    content: { rooms: readonly Room[]; shapes: readonly Shape[]; underlay: Underlay | undefined },
+    content: { rooms: readonly Room[]; walls: readonly Wall[]; shapes: readonly Shape[]; underlay: Underlay | undefined },
     image: CanvasImageSource | null,
     options: PdfOptions,
     settings: { gridStepCm: number; wallColor: string },
 ): FloorDrawing {
     return {
         rooms: content.rooms,
+        walls: content.walls,
         shapes: options.furniture ? content.shapes : [],
         underlay: options.underlay && content.underlay && image ? { underlay: content.underlay, image } : null,
         gridStepCm: options.grid ? settings.gridStepCm : null,
@@ -113,7 +117,7 @@ function offscreenLayer(): Konva.Layer {
  * plan's cm placed by `transform`. Layers from bottom to top: white paper,
  * grid, underlay, room areas; the walls on their own layer (bands minus
  * insides and opening gaps via `destination-out`, so what lies below stays
- * visible); opening symbols, room dimensions, furniture in drawing order
+ * visible), then the free walls on top of them (`WallsLayer`); opening symbols, room dimensions, furniture in drawing order
  * (each with its dimensions), room names with area.
  */
 export async function renderFloor(drawing: FloorDrawing, area: SizeMm, transform: DrawingTransform): Promise<string> {
@@ -152,6 +156,7 @@ export async function renderFloor(drawing: FloorDrawing, area: SizeMm, transform
 
         const walls = offscreenLayer();
         addWalls(walls, drawing.rooms, drawing.wallColor);
+        addFreeWalls(walls, drawing.walls, drawing.wallColor);
 
         const above = offscreenLayer();
         addOpeningSymbols(above, drawing.rooms, cm);
@@ -229,6 +234,22 @@ function addWalls(layer: Konva.Layer, rooms: readonly Room[], wallColor: string)
             const frame = edgeFrame(room.pointsCm, opening.edgeIndex);
             layer.add(cut(openingGap(frame, opening, room.wallThicknessCm[opening.edgeIndex])));
         }
+    }
+}
+
+/** Free walls as bands in the wall color, corners between two walls closed, like `WallsLayer`. */
+function addFreeWalls(layer: Konva.Layer, walls: readonly Wall[], wallColor: string) {
+    const joined = joinedEnds(walls);
+    for (const wall of walls) {
+        const caps = joined.get(wall.id);
+        layer.add(
+            new Konva.Line({
+                points: flat(freeWallBandOutline(wall, caps?.start, caps?.end)),
+                closed: true,
+                fill: wallColor,
+                perfectDrawEnabled: false,
+            }),
+        );
     }
 }
 

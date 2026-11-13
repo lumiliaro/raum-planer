@@ -24,10 +24,12 @@ import {
     pointOnWall,
     roundPointCm,
     wallLineFor,
+    wallLines,
     type Direction,
     type WallAnchor,
 } from "@/lib/room-drawing";
-import { GEOMETRY_EPS_CM } from "@/lib/room-geometry";
+import { distanceCm, GEOMETRY_EPS_CM, MIN_EDGE_CM } from "@/lib/room-geometry";
+import { freeWallLines } from "@/lib/wall-drawing";
 import type { PlanSettings, SettingsPatch } from "@/lib/plan-settings";
 import {
     PlanSchema,
@@ -42,6 +44,7 @@ import {
     type Room,
     type Shape,
     type ShapePatch,
+    type Wall,
 } from "@/lib/plan-schema";
 import { loadPlan, savePlan, type LoadOutcome } from "@/lib/plan-storage";
 import { createShape, type InsertableKind } from "@/lib/shape-factory";
@@ -73,8 +76,11 @@ export interface CalibrationDraft {
 
 export type CalibrationPointKey = "p1" | "p2";
 
-/** Session-only; never part of the plan. `door-opening`, `window` and `passage` set openings into room walls. */
-export type ActiveTool = "select" | InsertableKind | "room" | OpeningTool;
+/**
+ * Session-only; never part of the plan. `door-opening`, `window` and `passage` set openings into room walls,
+ * `wall` draws a free wall.
+ */
+export type ActiveTool = "select" | InsertableKind | "room" | "wall" | OpeningTool;
 
 export type OpeningTool = "door-opening" | "window" | "passage";
 
@@ -108,9 +114,15 @@ export interface OpeningSnapOptions {
 
 export type RoomDraftHint = "length" | "close" | "wallTooLong";
 
-/** A room being drawn with the tool „Raum“: session-only, not in the history. */
+/**
+ * A room being drawn with the tool „Raum“, or the start point of a free wall
+ * being drawn with „Wand“ (then at most one point): session-only, not in the history.
+ */
 export interface RoomDraft {
-    /** Corners set so far, rounded to 0.1 cm; none only while a distance on a wall is typed (`wallAnchor`). */
+    /**
+     * Corners set so far (with „Wand“: the start point), rounded to 0.1 cm; none
+     * only while a distance on a wall is typed (`wallAnchor`).
+     */
     points: PointCm[];
     /** Raw text of the length field (with `wallAnchor`: the distance on the wall); empty = field closed. */
     lengthText: string;
@@ -182,14 +194,16 @@ export interface AppState {
     activeTool: ActiveTool;
     /**
      * Session-only. Use `selectSelectedShape` – an id not on the active floor means "nothing selected".
-     * At most one of `selectedShapeId`, `selectedRoomId` and `selectedOpeningId` is set.
+     * At most one of `selectedShapeId`, `selectedRoomId`, `selectedOpeningId` and `selectedWallId` is set.
      */
     selectedShapeId: string | null;
     /** Session-only. Use `selectSelectedRoom`, like `selectedShapeId`. */
     selectedRoomId: string | null;
     /** Session-only. Use `selectSelectedOpening`, like `selectedShapeId`; opening ids are unique across the plan. */
     selectedOpeningId: string | null;
-    /** `null` = no room being drawn (also before the first corner). */
+    /** Session-only. Use `selectSelectedWall`, like `selectedShapeId`. */
+    selectedWallId: string | null;
+    /** `null` = no room or wall being drawn (also before the first point). */
     roomDraft: RoomDraft | null;
     /** Edge (0-based) of the selected room whose length field has the focus; highlighted on the canvas. */
     highlightedEdge: number | null;
@@ -234,12 +248,14 @@ export interface AppState {
 
     /** No effect in calibration mode. Discards a room being drawn. */
     setActiveTool: (tool: ActiveTool) => void;
-    /** Selects a shape and deselects room and opening; `null` clears the whole selection. */
+    /** Selects a shape and deselects room, opening and wall; `null` clears the whole selection. */
     selectShape: (id: string | null) => void;
-    /** Selects a room and deselects shape and opening; `null` clears the whole selection. */
+    /** Selects a room and deselects shape, opening and wall; `null` clears the whole selection. */
     selectRoom: (id: string | null) => void;
-    /** Selects an opening and deselects shape and room; `null` clears the whole selection. */
+    /** Selects an opening and deselects shape, room and wall; `null` clears the whole selection. */
     selectOpening: (id: string | null) => void;
+    /** Selects a free wall and deselects shape, room and opening; `null` clears the whole selection. */
+    selectWall: (id: string | null) => void;
     setHighlightedEdge: (index: number | null) => void;
     /** Written by the canvas while a room is dragged; no history step. */
     setRoomDrag: (drag: RoomDrag | null) => void;
@@ -303,10 +319,23 @@ export interface AppState {
     deleteSelectedOpening: () => boolean;
 
     /**
+     * Free wall actions, one undo step each; `false` (no effect) when rejected
+     * (invalid result, unknown wall, no change). Drawing a wall: see `addDraftPoint`.
+     */
+    updateWall: (floorId: FloorId, id: string, patch: planOps.WallPatch) => boolean;
+    moveWall: (floorId: FloorId, id: string, dx: number, dy: number) => boolean;
+    removeWall: (floorId: FloorId, id: string) => boolean;
+    /** Removes the selected wall and clears the selection; `false` without a selection. */
+    deleteSelectedWall: () => boolean;
+
+    /**
      * Drawing a room with the tool „Raum“. Corners are session state; only
      * `closeDraft` changes the plan (one undo step).
      * `addDraftPoint` sets the next corner (the first one starts the draft);
      * `false` if the tool is not active or the corner is not allowed.
+     * With „Wand“ the first point is the start of a free wall and the second
+     * one adds the wall (thickness from the settings, one undo step), selects
+     * it and switches to "select"; a wall shorter than 0.1 cm is not added.
      */
     addDraftPoint: (point: PointCm) => boolean;
     /** Removes the last corner; the draft ends with the first one. */
@@ -314,8 +343,8 @@ export interface AppState {
     /** Sets the field's text; an empty distance field (no corner yet) ends the draft. */
     setDraftLength: (text: string) => void;
     /**
-     * Sets a corner at the typed length from the last one in `direction` and
-     * empties the field. `false` (field stays) without direction, for a length
+     * Sets a corner (with „Wand“: the end, adding the wall) at the typed length
+     * from the last one in `direction` and empties the field. `false` (field stays) without direction, for a length
      * not greater than 0 cm (with hint) or a corner that is not allowed.
      */
     commitDraftLength: (direction: Direction | null) => boolean;
@@ -328,8 +357,9 @@ export interface AppState {
     cancelDraft: () => void;
     /**
      * Before the first corner: opens the field „Abstand“ with `text`, fixed on
-     * the anchor's wall line and end. `false` if the tool is not active or a
-     * draft already exists.
+     * the anchor's wall line and end. `false` if neither „Raum“ nor „Wand“ is
+     * active or a draft already exists. With „Wand“ the sides of the free walls
+     * are wall lines too.
      */
     startWallOffset: (anchor: WallAnchor, text: string) => boolean;
     /** Measures the typed distance from the other end of the wall. */
@@ -465,10 +495,53 @@ export function createAppStore(
                     selectedShapeId: null,
                     selectedRoomId: null,
                     selectedOpeningId: null,
+                    selectedWallId: null,
                     roomDraft: null,
                     highlightedEdge: null,
                     roomDrag: null,
                 } as const;
+
+                const NO_SELECTION = {
+                    selectedShapeId: null,
+                    selectedRoomId: null,
+                    selectedOpeningId: null,
+                    selectedWallId: null,
+                    highlightedEdge: null,
+                } as const;
+
+                /** „Raum“ or „Wand“ is the active, usable drawing tool. */
+                const drawingTool = (): "room" | "wall" | null => {
+                    const state = get();
+                    const tool = state.activeTool;
+                    return (tool === "room" || tool === "wall") && isToolEnabled(state, tool) ? tool : null;
+                };
+
+                /** The wall lines a start point snaps to: the rooms' walls, with „Wand“ also the free walls' sides. */
+                const drawingWallLines = () => {
+                    const { plan, activeTool } = get();
+                    const floorId = plan.activeFloorId;
+                    const lines = wallLines(plan.roomsByFloor[floorId] ?? []);
+                    return activeTool === "wall" ? [...lines, ...freeWallLines(plan.wallsByFloor[floorId] ?? [])] : lines;
+                };
+
+                /**
+                 * Adds the free wall from `start` to `end` with the default thickness on top of the
+                 * active floor's walls, selects it and switches to "select"; `false` for a wall of 0 cm.
+                 */
+                const finishWall = (start: PointCm, end: PointCm): boolean => {
+                    if (distanceCm(start, end) < MIN_EDGE_CM - GEOMETRY_EPS_CM) return false;
+                    const { plan: current } = get();
+                    const floorId = current.activeFloorId;
+                    const wall: Wall = {
+                        id: crypto.randomUUID(),
+                        startCm: start,
+                        endCm: roundPointCm(end),
+                        thicknessCm: current.settings.defaultWallThicknessCm,
+                    };
+                    const added = applyPlan((p) => planOps.addWall(p, floorId, wall, now()));
+                    if (added) set({ ...RESET_TOOL_AND_SELECTION, selectedWallId: wall.id });
+                    return added;
+                };
 
                 const updateRoomDraft = (fn: (draft: RoomDraft) => RoomDraft) => {
                     const draft = get().roomDraft;
@@ -546,6 +619,7 @@ export function createAppStore(
                     selectedShapeId: null,
                     selectedRoomId: null,
                     selectedOpeningId: null,
+                    selectedWallId: null,
                     roomDraft: null,
                     highlightedEdge: null,
                     roomDrag: null,
@@ -611,12 +685,10 @@ export function createAppStore(
                     setActiveTool: (tool) => {
                         if (isToolEnabled(get(), tool)) set({ activeTool: tool, roomDraft: null });
                     },
-                    selectShape: (id) =>
-                        set({ selectedShapeId: id, selectedRoomId: null, selectedOpeningId: null, highlightedEdge: null }),
-                    selectRoom: (id) =>
-                        set({ selectedRoomId: id, selectedShapeId: null, selectedOpeningId: null, highlightedEdge: null }),
-                    selectOpening: (id) =>
-                        set({ selectedOpeningId: id, selectedShapeId: null, selectedRoomId: null, highlightedEdge: null }),
+                    selectShape: (id) => set({ ...NO_SELECTION, selectedShapeId: id }),
+                    selectRoom: (id) => set({ ...NO_SELECTION, selectedRoomId: id }),
+                    selectOpening: (id) => set({ ...NO_SELECTION, selectedOpeningId: id }),
+                    selectWall: (id) => set({ ...NO_SELECTION, selectedWallId: id }),
                     setHighlightedEdge: (index) => set({ highlightedEdge: index }),
                     setRoomDrag: (drag) => set({ roomDrag: drag }),
                     insertShape: (kind, pointCm) => {
@@ -625,7 +697,7 @@ export function createAppStore(
                         const shape = createShape(kind, pointCm, crypto.randomUUID());
                         const added = applyPlan((p) => planOps.addShape(p, floorId, shape, now()));
                         if (added) {
-                            set({ selectedShapeId: shape.id, selectedRoomId: null, selectedOpeningId: null, activeTool: "select" });
+                            set({ ...NO_SELECTION, selectedShapeId: shape.id, activeTool: "select" });
                         }
                         return added;
                     },
@@ -732,6 +804,17 @@ export function createAppStore(
                         if (added) set({ ...RESET_TOOL_AND_SELECTION, selectedOpeningId: opening.id });
                         return added;
                     },
+
+                    updateWall: (floorId, id, patch) => applyPlan((p) => planOps.updateWall(p, floorId, id, patch, now())),
+                    moveWall: (floorId, id, dx, dy) => applyPlan((p) => planOps.moveWall(p, floorId, id, dx, dy, now())),
+                    removeWall: (floorId, id) => applyPlan((p) => planOps.removeWall(p, floorId, id, now())),
+                    deleteSelectedWall: () => {
+                        const { selectedWallId, plan } = get();
+                        if (!selectedWallId) return false;
+                        const removed = get().removeWall(plan.activeFloorId, selectedWallId);
+                        set({ selectedWallId: null });
+                        return removed;
+                    },
                     updateOpening: (floorId, openingId, patch) =>
                         applyPlan((p) => planOps.updateOpening(p, floorId, openingId, patch, now())),
                     removeOpening: (floorId, openingId) => applyPlan((p) => planOps.removeOpening(p, floorId, openingId, now())),
@@ -744,10 +827,11 @@ export function createAppStore(
                     },
 
                     addDraftPoint: (point) => {
-                        const state = get();
-                        if (state.activeTool !== "room" || !isToolEnabled(state, "room")) return false;
+                        const tool = drawingTool();
+                        if (!tool) return false;
                         const rounded = roundPointCm(point);
-                        const points = state.roomDraft?.points ?? [];
+                        const points = get().roomDraft?.points ?? [];
+                        if (tool === "wall" && points.length > 0) return finishWall(points[0], rounded);
                         if (!canAppendPoint(points, rounded)) return false;
                         set({ roomDraft: { points: [...points, rounded], lengthText: "", hint: null, wallAnchor: null } });
                         return true;
@@ -772,13 +856,14 @@ export function createAppStore(
                             return false;
                         }
                         const point = pointAtDistance(draft.points[draft.points.length - 1], direction, lengthCm);
+                        if (get().activeTool === "wall") return finishWall(draft.points[0], point);
                         if (!canAppendPoint(draft.points, point)) return false;
                         set({ roomDraft: { points: [...draft.points, point], lengthText: "", hint: null, wallAnchor: null } });
                         return true;
                     },
                     closeDraft: () => {
-                        const { roomDraft: draft, plan } = get();
-                        if (!draft || draft.points.length < 3) return false;
+                        const { roomDraft: draft, plan, activeTool } = get();
+                        if (activeTool !== "room" || !draft || draft.points.length < 3) return false;
                         if (!canClose(draft.points)) {
                             set({ roomDraft: { ...draft, hint: "close" } });
                             return false;
@@ -803,8 +888,7 @@ export function createAppStore(
                     },
                     cancelDraft: () => set({ roomDraft: null }),
                     startWallOffset: (anchor, text) => {
-                        const state = get();
-                        if (state.activeTool !== "room" || !isToolEnabled(state, "room") || state.roomDraft) return false;
+                        if (!drawingTool() || get().roomDraft) return false;
                         set({ roomDraft: { points: [], lengthText: text, hint: null, wallAnchor: { ...anchor } } });
                         return true;
                     },
@@ -822,9 +906,9 @@ export function createAppStore(
                                 : draft,
                         ),
                     commitWallOffset: () => {
-                        const { roomDraft: draft, plan } = get();
+                        const { roomDraft: draft } = get();
                         if (!draft?.wallAnchor) return false;
-                        const line = wallLineFor(plan.roomsByFloor[plan.activeFloorId] ?? [], draft.wallAnchor);
+                        const line = wallLineFor(drawingWallLines(), draft.wallAnchor);
                         if (!line) {
                             set({ roomDraft: null });
                             return false;
@@ -870,7 +954,7 @@ export function createAppStore(
                         return removed;
                     },
 
-                    // While a room is drawn, undo would pull the plan from under the draft.
+                    // While a room or wall is drawn, undo would pull the plan from under the draft.
                     undo: () => get().roomDraft === null && history.undo(historyHost, now()),
                     redo: () => get().roomDraft === null && history.redo(historyHost, now()),
 
@@ -1019,6 +1103,13 @@ export function selectSelectedOpening(
     return found && { room: found.room, opening: found.opening };
 }
 
+/** The selected free wall on the active floor, or `null` (also when its id is no longer there). */
+export function selectSelectedWall(state: Pick<AppState, "plan" | "selectedWallId">): Wall | null {
+    const { plan, selectedWallId } = state;
+    if (!selectedWallId) return null;
+    return plan.wallsByFloor[plan.activeFloorId]?.find((w) => w.id === selectedWallId) ?? null;
+}
+
 /** The selected shape on the active floor, or `null` (also when its id is no longer there). */
 export function selectSelectedShape(state: Pick<AppState, "plan" | "selectedShapeId">): Shape | null {
     const { plan, selectedShapeId } = state;
@@ -1028,14 +1119,14 @@ export function selectSelectedShape(state: Pick<AppState, "plan" | "selectedShap
 
 export const useAppStore = createAppStore(getBrowserStorage());
 
-/** `true` if there is a step to undo; always `false` in calibration mode and while a room is drawn. */
+/** `true` if there is a step to undo; always `false` in calibration mode and while a room or wall is drawn. */
 export function useCanUndo(): boolean {
     const blocked = useAppStore((s) => s.calibrationDraft !== null || s.roomDraft !== null);
     const hasPast = useStore(useAppStore.temporal, (s) => s.pastStates.length > 0);
     return hasPast && !blocked;
 }
 
-/** `true` if there is a step to redo; always `false` in calibration mode and while a room is drawn. */
+/** `true` if there is a step to redo; always `false` in calibration mode and while a room or wall is drawn. */
 export function useCanRedo(): boolean {
     const blocked = useAppStore((s) => s.calibrationDraft !== null || s.roomDraft !== null);
     const hasFuture = useStore(useAppStore.temporal, (s) => s.futureStates.length > 0);

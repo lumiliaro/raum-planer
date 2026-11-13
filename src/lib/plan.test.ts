@@ -4,13 +4,17 @@ import {
     addOpening,
     addRoom,
     addShape,
+    addWall,
     canMoveFloor,
     canRemoveFloor,
     canReorder,
     createEmptyPlan,
     findOpening,
+    floorHasContent,
+    floorRemovalContent,
     moveFloor,
     moveRoom,
+    moveWall,
     nextFloorName,
     nextRoomName,
     planHasContent,
@@ -20,6 +24,7 @@ import {
     renamePlan,
     removeRoom,
     removeShape,
+    removeWall,
     reorderShape,
     setActiveFloor,
     setCalibration,
@@ -30,12 +35,13 @@ import {
     resetSettings,
     updateSettings,
     updateUnderlay,
+    updateWall,
     type ReorderDirection,
 } from "@/lib/plan";
 import { FACTORY_SETTINGS } from "@/lib/plan-settings";
 import { PlanSchema, type FloorId, type Opening, type Plan, type Shape } from "@/lib/plan-schema";
 import { setEdgeLength } from "@/lib/room-geometry";
-import { CAL_EG, CAL_EG_OLD, CAL_OG, imageId, legacyPlan, rect, rectPoints, room, underlay, uuid } from "@/test/plan-fixtures";
+import { CAL_EG, CAL_EG_OLD, CAL_OG, imageId, legacyPlan, rect, rectPoints, room, underlay, uuid, wall } from "@/test/plan-fixtures";
 
 const FLOOR_IDS = ["eg", "og", "dg"];
 
@@ -57,11 +63,11 @@ function planWith(eg: Shape[], og: Shape[] = []): Plan {
 const ids = (shapes: Shape[]) => shapes.map((s) => s.id);
 
 describe("createEmptyPlan", () => {
-    it("creates version 11 with one active floor „Erdgeschoss“ without shapes, rooms and underlay and with the factory settings (Leerer Plan)", () => {
+    it("creates version 12 with one active floor „Erdgeschoss“ without shapes, rooms, walls and underlay and with the factory settings (Leerer Plan)", () => {
         const id = crypto.randomUUID();
         const plan = createEmptyPlan(CREATED, () => id);
         expect(plan).toEqual({
-            schemaVersion: 11,
+            schemaVersion: 12,
             name: "Meine Planung",
             createdAt: "2026-11-01T10:00:00.000Z",
             updatedAt: "2026-11-01T10:00:00.000Z",
@@ -70,6 +76,7 @@ describe("createEmptyPlan", () => {
             underlayByFloor: {},
             shapesByFloor: { [id]: [] },
             roomsByFloor: { [id]: [] },
+            wallsByFloor: { [id]: [] },
             settings: FACTORY_SETTINGS,
         });
         expect(plan.settings.defaultWallThicknessCm).toBe(15);
@@ -329,6 +336,10 @@ describe("planHasContent", () => {
     it("is true for a plan with only a room", () => {
         expect(planHasContent(addRoom(legacyPlan(NOW), "og", room(1), NOW))).toBe(true);
     });
+
+    it("is true for a plan with only a wall", () => {
+        expect(planHasContent(addWall(legacyPlan(NOW), "dg", wall(1), NOW))).toBe(true);
+    });
 });
 
 describe("renamePlan", () => {
@@ -457,6 +468,7 @@ describe("addFloor", () => {
         expect(after.activeFloorId).toBe(KELLER);
         expect(after.shapesByFloor[KELLER]).toEqual([]);
         expect(after.roomsByFloor[KELLER]).toEqual([]);
+        expect(after.wallsByFloor[KELLER]).toEqual([]);
         expect(after.underlayByFloor[KELLER]).toBeUndefined();
         expect(after.updatedAt).toBe(NOW.toISOString());
         expect(after.shapesByFloor.eg).toBe(before.shapesByFloor.eg);
@@ -545,9 +557,12 @@ describe("removeFloor", () => {
         return setUnderlay(plan, "eg", underlay(CAL_EG), CREATED);
     };
 
-    it("removes shapes, rooms and underlay; other floors keep their references", () => {
-        const before = addRoom(addRoom(full(), "og", room(20), CREATED), "eg", room(21), CREATED);
+    it("removes shapes, rooms, walls and underlay; other floors keep their references", () => {
+        const withRooms = addRoom(addRoom(full(), "og", room(20), CREATED), "eg", room(21), CREATED);
+        const before = addWall(addWall(withRooms, "og", wall(30), CREATED), "eg", wall(31), CREATED);
         const after = removeFloor(before, "og", NOW);
+        expect(after.wallsByFloor).not.toHaveProperty("og");
+        expect(after.wallsByFloor.eg).toBe(before.wallsByFloor.eg);
         expect(floorNames(after)).toEqual(["Erdgeschoss", "Dachgeschoss"]);
         expect(after.shapesByFloor).not.toHaveProperty("og");
         expect(after.roomsByFloor).not.toHaveProperty("og");
@@ -1094,5 +1109,96 @@ describe("updateSettings / resetSettings (Einstellungen im Plan)", () => {
         expect(reset.settings).not.toBe(FACTORY_SETTINGS);
         expect(reset.updatedAt).toBe("2026-11-11T18:30:00.000Z");
         expect(resetSettings(reset, NOW)).toBe(reset);
+    });
+});
+
+describe("free walls (Wände im Plan)", () => {
+    const W = wall(40);
+
+    it("appends a wall to the end of the floor's list and sets updatedAt", () => {
+        const before = addWall(legacyPlan(CREATED), "eg", wall(41, { x: 0, y: 0 }, { x: 0, y: 250 }), CREATED);
+        const after = addWall(before, "eg", W, NOW);
+        expect(after.wallsByFloor.eg.map((w) => w.id)).toEqual([uuid(41), W.id]);
+        expect(after.updatedAt).toBe(NOW.toISOString());
+        expect(after.roomsByFloor).toBe(before.roomsByFloor);
+        expect(after.shapesByFloor).toBe(before.shapesByFloor);
+        expect(PlanSchema.safeParse(after).success).toBe(true);
+    });
+
+    it("rejects an invalid wall, an id in use on another floor and an unknown floor", () => {
+        const plan = addWall(legacyPlan(CREATED), "eg", W, CREATED);
+        expect(addWall(plan, "og", { ...W }, NOW)).toBe(plan);
+        expect(addWall(plan, "og", wall(42, { x: 5, y: 5 }, { x: 5, y: 5 }), NOW)).toBe(plan);
+        expect(addWall(plan, "og", wall(42, undefined, undefined, 120), NOW)).toBe(plan);
+        expect(addWall(plan, "kg", wall(42), NOW)).toBe(plan);
+    });
+
+    it("changes the end and the thickness, keeping id and place", () => {
+        const plan = addWall(addWall(legacyPlan(CREATED), "eg", W, CREATED), "eg", wall(41, { x: 0, y: 0 }, { x: 0, y: 250 }), CREATED);
+        const after = updateWall(plan, "eg", W.id, { endCm: { x: 400, y: 100 }, thicknessCm: 24 }, NOW);
+        expect(after.wallsByFloor.eg[0]).toEqual({ ...W, endCm: { x: 400, y: 100 }, thicknessCm: 24 });
+        expect(after.wallsByFloor.eg[1]).toBe(plan.wallsByFloor.eg[1]);
+        expect(after.updatedAt).toBe(NOW.toISOString());
+    });
+
+    it("rejects a patch of length 0, of thickness 0 or 120 cm, one that changes nothing and an unknown id", () => {
+        const plan = addWall(legacyPlan(CREATED), "eg", W, CREATED);
+        expect(updateWall(plan, "eg", W.id, { endCm: { ...W.startCm } }, NOW)).toBe(plan);
+        expect(updateWall(plan, "eg", W.id, { thicknessCm: 0 }, NOW)).toBe(plan);
+        expect(updateWall(plan, "eg", W.id, { thicknessCm: 120 }, NOW)).toBe(plan);
+        expect(updateWall(plan, "eg", W.id, { thicknessCm: W.thicknessCm }, NOW)).toBe(plan);
+        expect(updateWall(plan, "eg", uuid(99), { thicknessCm: 20 }, NOW)).toBe(plan);
+    });
+
+    it("moves a wall keeping length, direction and thickness (Wand ziehen)", () => {
+        const plan = addWall(legacyPlan(CREATED), "eg", W, CREATED);
+        const after = moveWall(plan, "eg", W.id, 50, 20, NOW);
+        expect(after.wallsByFloor.eg[0]).toEqual({ ...W, startCm: { x: 150, y: 120 }, endCm: { x: 480, y: 120 } });
+        expect(moveWall(plan, "eg", W.id, 0, 0, NOW)).toBe(plan);
+        expect(moveWall(plan, "eg", uuid(99), 5, 0, NOW)).toBe(plan);
+    });
+
+    it("removes a wall and leaves rooms and shapes as they are", () => {
+        let plan = addWall(legacyPlan(CREATED), "eg", W, CREATED);
+        plan = addRoom(addShape(plan, "eg", A, CREATED), "eg", room(20), CREATED);
+        const after = removeWall(plan, "eg", W.id, NOW);
+        expect(after.wallsByFloor.eg).toEqual([]);
+        expect(after.roomsByFloor).toBe(plan.roomsByFloor);
+        expect(after.shapesByFloor).toBe(plan.shapesByFloor);
+        expect(after.updatedAt).toBe(NOW.toISOString());
+        expect(removeWall(after, "eg", W.id, NOW)).toBe(after);
+    });
+
+    it("sets updatedAt when a wall is drawn (Änderungszeitpunkt)", () => {
+        const drawnAt = new Date("2026-11-13T09:15:00.000Z");
+        expect(addWall(legacyPlan(CREATED), "eg", W, drawnAt).updatedAt).toBe("2026-11-13T09:15:00.000Z");
+    });
+});
+
+describe("floorHasContent / floorRemovalContent (Wände beim Löschen einer Etage)", () => {
+    it("names only the walls of a floor without shapes and rooms (Etage nur mit Wänden)", () => {
+        const plan = addWall(addWall(legacyPlan(CREATED), "dg", wall(1), CREATED), "dg", wall(2), CREATED);
+        expect(floorHasContent(plan, "dg")).toBe(true);
+        expect(floorRemovalContent(plan, "dg")).toBe("2 Wänden");
+    });
+
+    it("lists shapes, rooms and walls with commas and „und“", () => {
+        let plan = addShape(addShape(legacyPlan(CREATED), "eg", A, CREATED), "eg", B, CREATED);
+        plan = addRoom(plan, "eg", room(20), CREATED);
+        plan = addWall(plan, "eg", wall(30), CREATED);
+        expect(floorRemovalContent(plan, "eg")).toBe("2 Formen, 1 Raum und 1 Wand");
+    });
+
+    it("keeps „2 Formen und 3 Räumen“ without walls", () => {
+        let plan = addShape(addShape(legacyPlan(CREATED), "eg", A, CREATED), "eg", B, CREATED);
+        for (const n of [20, 21, 22]) plan = addRoom(plan, "eg", room(n, `Raum ${n}`, rectPoints(n * 1000, 0, 100, 100)), CREATED);
+        expect(floorRemovalContent(plan, "eg")).toBe("2 Formen und 3 Räumen");
+    });
+
+    it("says „Vorlage“ for a floor with only an underlay and has no content on an empty floor", () => {
+        const plan = setUnderlay(legacyPlan(CREATED), "og", underlay(), CREATED);
+        expect(floorHasContent(plan, "og")).toBe(true);
+        expect(floorRemovalContent(plan, "og")).toBe("Vorlage");
+        expect(floorHasContent(plan, "dg")).toBe(false);
     });
 });

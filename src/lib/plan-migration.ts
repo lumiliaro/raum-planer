@@ -143,6 +143,23 @@ export const PLAN_MIGRATIONS: Readonly<Record<number, PlanMigration>> = Object.f
      * check (or the import) decides. Everything else stays as it is.
      */
     10: (data) => mapRooms(data, (room) => (Object.hasOwn(room, "locked") ? room : { ...room, locked: false })),
+    /**
+     * 11 → 12: free walls. Adds `wallsByFloor` with an empty list for every
+     * floor of `floors` that has none yet; existing entries stay as they are
+     * and the schema check (or the import) decides. Everything else stays.
+     */
+    11: (data) => {
+        const existing = isRecord(data.wallsByFloor) ? data.wallsByFloor : {};
+        const wallsByFloor: Record<string, unknown> = { ...existing };
+        if (Array.isArray(data.floors)) {
+            for (const floor of data.floors) {
+                if (isRecord(floor) && typeof floor.id === "string" && !Object.hasOwn(wallsByFloor, floor.id)) {
+                    wallsByFloor[floor.id] = [];
+                }
+            }
+        }
+        return { ...data, wallsByFloor };
+    },
 });
 
 /**

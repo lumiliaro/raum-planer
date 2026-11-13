@@ -150,13 +150,18 @@ Die Fußzeile SHALL einen Maßstabsbalken zeigen, beschriftet mit „0“ am Anf
 - **THEN** ist der Maßstabsbalken 10 cm lang und mit „0“ und „5 m“ beschriftet
 
 ### Requirement: Inhalt der Zeichnung
-Jede Seite SHALL die Räume der Etage in Farbe wie im Editor zeigen: Raumfläche in der Raumfarbe, die Wände als Band in der Wandfarbe des Plans, Türen mit Aufschlag, Fenster und Durchgänge. Auswahl-Markierungen, Fanghilfen und Hervorhebungen des Editors MUST NOT erscheinen.
+Jede Seite SHALL die Räume der Etage in Farbe wie im Editor zeigen: Raumfläche in der Raumfarbe, die Wände als Band in der Wandfarbe des Plans, Türen mit Aufschlag, Fenster und Durchgänge. Die freien Wände der Etage SHALL wie im Editor als Band in der Wandfarbe über den Räumen erscheinen und beim Bemessen der Zeichnung mitzählen. Auswahl-Markierungen, Fanghilfen und Hervorhebungen des Editors MUST NOT erscheinen.
 
 #### Scenario: Raum mit Tür
 - **GIVEN** im Erdgeschoss ist ein Raum ausgewählt, der eine Tür mit 80 cm Breite und einen Aufschlag hat
 - **WHEN** der Nutzer ein PDF des Erdgeschosses erstellt
 - **THEN** zeigt die Seite den Raum mit Wandband, die Türöffnung von 80 cm mit Türblatt und Aufschlag
 - **AND** die blaue Auswahl-Umrandung ist nicht zu sehen
+
+#### Scenario: Freie Wand
+- **GIVEN** im Erdgeschoss ist eine Wand von (0 cm, 0 cm) nach (0 cm, 300 cm) mit 11,5 cm Dicke ausgewählt
+- **WHEN** der Nutzer ein PDF des Erdgeschosses erstellt
+- **THEN** zeigt die Seite die Wand als Band in der Wandfarbe ohne Griffe und ohne Auswahl-Umrandung
 
 ### Requirement: Möbel im PDF
 Ist „Möbel“ angehakt, SHALL jede Seite die Möbel der Etage in ihrer Zeichenreihenfolge über den Räumen zeigen, mit Form, Farben, Deckkraft und Beschriftung wie im Editor. Ist „Möbel“ nicht angehakt, MUST keine Möbel erscheinen.

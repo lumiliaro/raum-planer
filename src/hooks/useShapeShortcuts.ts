@@ -2,7 +2,7 @@ import Konva from "konva";
 import { useEffect } from "react";
 import { toolForKey } from "@/components/layout/tools";
 import { isEditableTarget, isInDialog, targetOwnsUndo } from "@/hooks/isEditableTarget";
-import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, useAppStore } from "@/store/app-store";
+import { selectSelectedOpening, selectSelectedRoom, selectSelectedShape, selectSelectedWall, useAppStore } from "@/store/app-store";
 
 /** Ctrl/⌘ + key → clipboard action of the store. */
 const CLIPBOARD_ACTIONS: Readonly<Record<string, "copySelection" | "cutSelection" | "pasteClipboard" | "duplicateSelection">> = {
@@ -13,9 +13,9 @@ const CLIPBOARD_ACTIONS: Readonly<Record<string, "copySelection" | "cutSelection
 };
 
 /**
- * Tool and shape shortcuts: ? opens „Hilfe“, the keys of `TOOLS` (V, R, E, L, U, C, G, T, F) choose a
+ * Tool and shape shortcuts: ? opens „Hilfe“, the keys of `TOOLS` (V, R, E, L, U, C, G, W, T, F, D) choose a
  * tool, Esc cancels a tool or clears the selection, Delete/Backspace
- * remove the selected shape, room or opening, PageUp/PageDown move it in the drawing order (with
+ * remove the selected shape, room, wall or opening, PageUp/PageDown move it in the drawing order (with
  * Shift to the top/bottom), B shows or hides the active floor's underlay, M shows or hides the
  * dimensions. Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z and Ctrl/⌘+Y redo
  * everywhere like the header buttons – except in a text field with uncommitted
@@ -28,7 +28,7 @@ const CLIPBOARD_ACTIONS: Readonly<Record<string, "copySelection" | "cutSelection
  * fields or buttons) and with Ctrl/Meta/Alt. The store decides what is allowed
  * (calibration mode, locked shape, floor without underlay, undo while a room
  * is drawn). Keys pressed inside a dialog belong to the dialog. While a room
- * is drawn, its own keys come first (`RoomDraftLayer`).
+ * or wall is drawn, its own keys come first (`RoomDraftLayer`).
  * New keys must also be added to `components/help/shortcuts.ts`.
  */
 export function useShapeShortcuts() {
@@ -104,6 +104,7 @@ export function useShapeShortcuts() {
                 e.preventDefault();
                 if (selectSelectedOpening(state)) state.deleteSelectedOpening();
                 else if (selectSelectedRoom(state)) state.deleteSelectedRoom();
+                else if (selectSelectedWall(state)) state.deleteSelectedWall();
                 else state.deleteSelectedShape();
             }
         };

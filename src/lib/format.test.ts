@@ -11,6 +11,7 @@ import {
     formatPxPerCm,
     formatRoomCount,
     formatShapeCount,
+    formatWallCount,
     formatZoomPercent,
     openingKindName,
 } from "@/lib/format";
@@ -112,6 +113,19 @@ describe("formatRoomCount", () => {
     it("uses the dative plural after „mit“", () => {
         expect(formatRoomCount(3, { dative: true })).toBe("3 Räumen");
         expect(formatRoomCount(1, { dative: true })).toBe("1 Raum");
+    });
+});
+
+describe("formatWallCount", () => {
+    it("uses singular only for exactly one wall", () => {
+        expect(formatWallCount(0)).toBe("0 Wände");
+        expect(formatWallCount(1)).toBe("1 Wand");
+        expect(formatWallCount(4)).toBe("4 Wände");
+    });
+
+    it("uses the dative plural after „mit“", () => {
+        expect(formatWallCount(2, { dative: true })).toBe("2 Wänden");
+        expect(formatWallCount(1, { dative: true })).toBe("1 Wand");
     });
 });
 

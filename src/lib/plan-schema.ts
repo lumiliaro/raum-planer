@@ -9,11 +9,18 @@ import { CalibrationSchema } from "@/lib/calibration-schema";
 import { HexColorSchema } from "@/lib/color-schema";
 import { openingMisfit } from "@/lib/opening-geometry";
 import { PlanSettingsSchema } from "@/lib/plan-settings";
-import { hasNoZeroEdges, isSimplePolygon, MAX_WALL_THICKNESS_CM } from "@/lib/room-geometry";
+import {
+    distanceCm,
+    GEOMETRY_EPS_CM,
+    hasNoZeroEdges,
+    isSimplePolygon,
+    MAX_WALL_THICKNESS_CM,
+    MIN_EDGE_CM,
+} from "@/lib/room-geometry";
 
 export { HexColorSchema };
 
-export const PLAN_SCHEMA_VERSION = 11;
+export const PLAN_SCHEMA_VERSION = 12;
 
 /** Upper limit of floors in a plan. */
 export const MAX_FLOORS = 8;
@@ -90,6 +97,23 @@ export const OpeningSchema = z
     .refine((o) => o.kind !== "door" || o.beforeFullEdge === null, {
         message: "A door does not remember sizes for the full edge",
         path: ["beforeFullEdge"],
+    });
+
+/**
+ * A free wall (not part of a room): a straight piece given by the start and
+ * end point of its center line, absolute in cm, and its thickness, half of it
+ * on each side of the center line. The center line is at least 0.1 cm long.
+ */
+export const WallSchema = z
+    .object({
+        id: z.uuid(),
+        startCm: PointCmSchema,
+        endCm: PointCmSchema,
+        thicknessCm: z.number().positive().max(MAX_WALL_THICKNESS_CM),
+    })
+    .refine((wall) => distanceCm(wall.startCm, wall.endCm) >= MIN_EDGE_CM - GEOMETRY_EPS_CM, {
+        message: "Wall of 0 cm",
+        path: ["endCm"],
     });
 
 /**
@@ -280,14 +304,16 @@ const PlanObjectSchema = z.object({
     shapesByFloor: z.record(FloorIdSchema, z.array(ShapeSchema)),
     /** Keys: exactly the floor ids. Drawing order: the last room lies on top. */
     roomsByFloor: z.record(FloorIdSchema, z.array(RoomSchema)),
+    /** Keys: exactly the floor ids. Free walls; drawing order: the last wall lies on top. */
+    wallsByFloor: z.record(FloorIdSchema, z.array(WallSchema)),
     /** Default values, grid, snap steps and wall color (see `plan-settings.ts`). */
     settings: PlanSettingsSchema,
 });
 
 /**
- * Floor ids unique, active floor present, `shapesByFloor` and `roomsByFloor`
- * keyed by exactly the floors, `underlayByFloor` by a subset, shape ids,
- * room ids and opening ids unique across the plan.
+ * Floor ids unique, active floor present, `shapesByFloor`, `roomsByFloor` and
+ * `wallsByFloor` keyed by exactly the floors, `underlayByFloor` by a subset,
+ * shape ids, room ids, wall ids and opening ids unique across the plan.
  */
 function checkFloorConsistency(plan: z.infer<typeof PlanObjectSchema>, ctx: z.RefinementCtx): void {
     const floorIds = new Set<string>();
@@ -302,6 +328,7 @@ function checkFloorConsistency(plan: z.infer<typeof PlanObjectSchema>, ctx: z.Re
     }
     checkKeyedByFloors(plan.shapesByFloor, "shapesByFloor", "shape", floorIds, ctx);
     checkKeyedByFloors(plan.roomsByFloor, "roomsByFloor", "room", floorIds, ctx);
+    checkKeyedByFloors(plan.wallsByFloor, "wallsByFloor", "wall", floorIds, ctx);
     for (const key of Object.keys(plan.underlayByFloor)) {
         if (!floorIds.has(key)) {
             ctx.addIssue({ code: "custom", message: "Underlay of an unknown floor", path: ["underlayByFloor", key] });
@@ -309,6 +336,7 @@ function checkFloorConsistency(plan: z.infer<typeof PlanObjectSchema>, ctx: z.Re
     }
     checkUniqueIds(plan.shapesByFloor, "shapesByFloor", "shape", ctx);
     checkUniqueIds(plan.roomsByFloor, "roomsByFloor", "room", ctx);
+    checkUniqueIds(plan.wallsByFloor, "wallsByFloor", "wall", ctx);
     checkUniqueOpeningIds(plan.roomsByFloor, ctx);
 }
 
@@ -331,15 +359,19 @@ function checkUniqueOpeningIds(roomsByFloor: Record<string, { openings: { id: st
     }
 }
 
+type ByFloorKey = "shapesByFloor" | "roomsByFloor" | "wallsByFloor";
+type ItemWord = "shape" | "room" | "wall";
+const PLURAL: Readonly<Record<ItemWord, string>> = { shape: "Shapes", room: "Rooms", wall: "Walls" };
+
 /** The record has a list for every floor and none for an unknown floor. */
 function checkKeyedByFloors(
     byFloor: Record<string, unknown[]>,
-    key: "shapesByFloor" | "roomsByFloor",
-    what: "shape" | "room",
+    key: ByFloorKey,
+    what: ItemWord,
     floorIds: ReadonlySet<string>,
     ctx: z.RefinementCtx,
 ): void {
-    const plural = what === "shape" ? "Shapes" : "Rooms";
+    const plural = PLURAL[what];
     for (const floorId of Object.keys(byFloor)) {
         if (!floorIds.has(floorId)) {
             ctx.addIssue({ code: "custom", message: `${plural} of an unknown floor`, path: [key, floorId] });
@@ -355,8 +387,8 @@ function checkKeyedByFloors(
 /** Ids of the items are unique across all floors. */
 function checkUniqueIds(
     byFloor: Record<string, { id: string }[]>,
-    key: "shapesByFloor" | "roomsByFloor",
-    what: "shape" | "room",
+    key: ByFloorKey,
+    what: ItemWord,
     ctx: z.RefinementCtx,
 ): void {
     const ids = new Set<string>();
@@ -380,6 +412,7 @@ export type Floor = z.infer<typeof FloorSchema>;
 export type ImageId = z.infer<typeof ImageIdSchema>;
 export type Underlay = z.infer<typeof UnderlaySchema>;
 export type Room = z.infer<typeof RoomSchema>;
+export type Wall = z.infer<typeof WallSchema>;
 export type Opening = z.infer<typeof OpeningSchema>;
 export type OpeningKind = Opening["kind"];
 export type Swing = z.infer<typeof SwingSchema>;
