@@ -1,7 +1,12 @@
 import type Konva from "konva";
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Group, Layer, Line } from "react-konva";
-import { DIMENSION_GAP_PX, DIMENSION_HEIGHT_PX, dimensionWidthPx } from "@/components/canvas/dimension-measure";
+import {
+    DIMENSION_GAP_PX,
+    DIMENSION_HEIGHT_PX,
+    dimensionMeasure,
+    subscribeDimensionFont,
+} from "@/components/canvas/dimension-measure";
 import { DimensionText } from "@/components/canvas/DimensionText";
 import { OpeningsLayer, type OpeningDrag, type SnapMark } from "@/components/canvas/OpeningsLayer";
 import { ShapeLabel } from "@/components/canvas/ShapeLabel";
@@ -81,17 +86,19 @@ export function RoomsLayer({ floorId, scale, hoverMark }: RoomsLayerProps) {
     );
     const [openingDrag, setOpeningDrag] = useState<OpeningDrag | null>(null);
     const showDimensions = useAppStore((s) => s.showDimensions);
+    // Replaced (measured anew) once fonts have loaded.
+    const widthPx = useSyncExternalStore(subscribeDimensionFont, dimensionMeasure);
     // Whether a dimension fits outside depends on the text's size in cm, so on the zoom.
     const dimensions = useMemo(
         () =>
             showDimensions
                 ? placeRoomDimensions(
                       rooms,
-                      (text) => ({ widthCm: dimensionWidthPx(text) / scale, heightCm: DIMENSION_HEIGHT_PX / scale }),
+                      (text) => ({ widthCm: widthPx(text) / scale, heightCm: DIMENSION_HEIGHT_PX / scale }),
                       DIMENSION_GAP_PX / scale,
                   )
                 : null,
-        [showDimensions, rooms, scale],
+        [showDimensions, rooms, scale, widthPx],
     );
 
     const offsetOf = (id: string) => (drag?.id === id ? drag : { dx: 0, dy: 0 });

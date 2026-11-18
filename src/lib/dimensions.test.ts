@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    dimensionBoxWidth,
     dimensionCenterCm,
     dimensionFits,
     placeRoomDimensions,
@@ -205,5 +206,18 @@ describe("dimensionFits", () => {
         expect(dimensionFits(42.1, 50)).toBe(false);
         expect(dimensionFits(48, 50, 1)).toBe(true);
         expect(dimensionFits(48.1, 50, 1)).toBe(false);
+    });
+});
+
+describe("dimensionBoxWidth", () => {
+    it("adds one font size of slack to the text width", () => {
+        expect(dimensionBoxWidth(40, 11)).toBe(51);
+        expect(dimensionBoxWidth(0.5, 0.2)).toBeCloseTo(0.7, 9);
+    });
+
+    it("is always wider than the text", () => {
+        for (const [text, font] of [[40, 11], [0, 11], [123.4, 2], [3.7, 0.05]]) {
+            expect(dimensionBoxWidth(text, font)).toBeGreaterThan(text);
+        }
     });
 });

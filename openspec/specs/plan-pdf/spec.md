@@ -180,7 +180,7 @@ Ist „Raumnamen und Fläche“ angehakt, SHALL in jedem Raum an der Stelle sein
 - **THEN** steht im Raum „Küche“ und darunter „12,50 m²“
 
 ### Requirement: Maße im PDF
-Ist „Maße“ angehakt, SHALL jede Seite an jeder Raumkante deren Innenlänge zeigen und, wenn auch „Möbel“ angehakt ist, an jedem Möbel Breite und Tiefe – mit Text, Lage (Raummaße außen vor der Wand, bei belegter Außenseite innen), Farbe und Lesrichtung wie bei der Maßanzeige im Editor, in fester Schriftgröße auf dem Papier. Ein Maß, das auf dem Papier länger als seine Kante ist, MUST weggelassen werden. Ohne „Maße“ MUST kein Maß erscheinen, unabhängig von der Maßanzeige im Editor.
+Ist „Maße“ angehakt, SHALL jede Seite an jeder Raumkante deren Innenlänge zeigen und, wenn auch „Möbel“ angehakt ist, an jedem Möbel Breite und Tiefe – mit Text, Lage (Raummaße außen vor der Wand, bei belegter Außenseite innen), Farbe und Lesrichtung wie bei der Maßanzeige im Editor, in fester Schriftgröße auf dem Papier. Jedes gedruckte Maß MUST vollständig mit Zahl und Einheit erscheinen und MUST NOT abgeschnitten werden. Ein Maß, das auf dem Papier länger als seine Kante ist, MUST weggelassen werden. Ohne „Maße“ MUST kein Maß erscheinen, unabhängig von der Maßanzeige im Editor.
 
 #### Scenario: Raummaße bei 1:100
 - **GIVEN** der Raum „Küche“ ist innen 400 cm × 312,5 cm groß und hat keinen Nachbarraum
@@ -201,6 +201,11 @@ Ist „Maße“ angehakt, SHALL jede Seite an jeder Raumkante deren Innenlänge 
 - **GIVEN** die Maßanzeige im Editor ist eingeschaltet
 - **WHEN** der Nutzer das PDF ohne „Maße“ erstellt
 - **THEN** zeigt keine Seite ein Maß
+
+#### Scenario: Einheit vollständig im PDF
+- **GIVEN** der Raum „Küche“ ist innen 400 cm × 312,5 cm groß
+- **WHEN** der Nutzer das PDF mit „Maße“ in den Maßstäben 1:50, 1:100 und „Auf Seite einpassen“ erstellt
+- **THEN** steht auf jeder Seite „400 cm“ und „312,5 cm“ vollständig, nie „400 c“ oder „312,5 c“
 
 ### Requirement: Platz für Maße im PDF
 Mit „Maße“ MUST um den Inhalt so viel Platz bleiben, dass auch die Maße außen vor den Außenwänden ganz auf der Zeichenfläche liegen. „Auf Seite einpassen“ und der Hinweis „Passt nicht auf die Seite“ SHALL diesen Platz berücksichtigen.
