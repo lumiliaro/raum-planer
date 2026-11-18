@@ -99,7 +99,7 @@ Bei eingeschalteter Maßanzeige SHALL jedes Möbel der aktiven Etage seine Breit
 - **THEN** steht innen an ihrer unteren Kante „80 cm“ und sonst kein Maß
 
 ### Requirement: Lesbare Maße
-Jedes Maß SHALL in fester Bildschirmgröße bei jedem Zoom stehen und MUST NOT auf dem Kopf stehen: waagerechte und geneigte Maße lesen sich von links nach rechts, senkrechte von unten nach oben. Ist ein Maß auf dem Bildschirm länger als seine Kante, MUST es weggelassen werden.
+Jedes Maß SHALL in fester Bildschirmgröße bei jedem Zoom stehen und MUST NOT auf dem Kopf stehen: waagerechte und geneigte Maße lesen sich von links nach rechts, senkrechte von unten nach oben. Ein angezeigtes Maß MUST vollständig mit Zahl und Einheit zu sehen sein und MUST NOT abgeschnitten werden, auch nicht beim ersten Anzeigen nach dem Laden der App. Ist ein Maß auf dem Bildschirm länger als seine Kante, MUST es weggelassen werden.
 
 #### Scenario: Obere Kante bei 180° gedrehtem Möbel
 - **GIVEN** die Maßanzeige ist an und ein Rechteck mit Breite 180 cm ist um 180° gedreht
@@ -111,6 +111,12 @@ Jedes Maß SHALL in fester Bildschirmgröße bei jedem Zoom stehen und MUST NOT 
 - **THEN** wird „40 cm“ an dieser Kante nicht angezeigt
 - **WHEN** der Nutzer wieder hineinzoomt, bis die Kante länger als der Text ist
 - **THEN** steht „40 cm“ wieder an der Kante
+
+#### Scenario: Einheit vollständig
+- **GIVEN** die Maßanzeige ist an und der Raum „Küche“ hat eine 312,5 cm lange Kante
+- **WHEN** die App neu geladen wird
+- **THEN** steht an dieser Kante „312,5 cm“ vollständig, nicht „312,5 c“
+- **AND** jedes andere angezeigte Raum- oder Möbelmaß endet ebenso mit „cm“
 
 ### Requirement: Maße und andere Inhalte
 Die Maße eines Raums SHALL mit dem Raum unter allen Möbeln liegen, die Maße eines Möbels mit dem Möbel unter den Möbeln, die darüber liegen. Maße MUST NOT Klicks abfangen und MUST NOT die Größe des Auswahlrahmens verändern. Im Kalibrier-Modus MUST keine Maße zu sehen sein.
