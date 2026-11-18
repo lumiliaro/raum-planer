@@ -157,3 +157,12 @@ export function readableRotationDeg(edgeAngleDeg: number, groupRotationDeg: numb
 export function dimensionFits(textLength: number, edgeLength: number, margin = 4): boolean {
     return textLength + 2 * margin <= edgeLength;
 }
+
+/**
+ * Width of the text box of a dimension: the measured text width plus one font
+ * size of slack (half on each side), so a slightly too narrow measurement never
+ * cuts off the last character. Centered text stays where it was.
+ */
+export function dimensionBoxWidth(textWidth: number, fontSize: number): number {
+    return textWidth + fontSize;
+}

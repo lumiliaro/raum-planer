@@ -15,6 +15,7 @@ import {
 } from "@/components/canvas/canvas-style";
 import {
     dimensionCenterCm,
+    dimensionBoxWidth,
     dimensionFits,
     placeRoomDimensions,
     readableRotationDeg,
@@ -364,7 +365,8 @@ class DimensionPainter {
     private node(label: DimensionLabel, center: PointCm, rotation: number, color: string): Konva.Text | null {
         const widthMm = this.widthMm(label.text);
         if (!dimensionFits(widthMm, label.lengthCm * this.mmPerCm, DIMENSION_MARGIN_MM)) return null;
-        const width = this.cm(widthMm);
+        // Wider than the measured text: Konva cuts off what does not fit the box.
+        const width = dimensionBoxWidth(this.cm(widthMm), this.cm(DIMENSION_FONT_MM));
         const height = this.cm(DIMENSION_HEIGHT_MM);
         return new Konva.Text({
             ...center,
